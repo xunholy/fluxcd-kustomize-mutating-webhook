@@ -1,0 +1,29 @@
+# TODO: Update CIDR
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kustomize-mutating-webhook
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app: kustomize-mutating-webhook
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow Kubernetes API server to connect with port 8443
+    - from:
+      - ipBlock:
+          cidr: <CIDR>
+      ports:
+        - port: 8443
+  egress:
+    # Allow Webhook server to connect with Kubernetes API server on port 443
+    - ports:
+      - port: 443
+        protocol: TCP
+      to:
+      - ipBlock:
+          cidr: <CIDR>

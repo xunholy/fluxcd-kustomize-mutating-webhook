@@ -1,0 +1,35 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kustomize-mutating-webhook.xunholy.com
+  namespace: flux-system
+  annotations:
+    cert-manager.io/inject-ca-from: flux-system/kustomize-mutating-webhook
+webhooks:
+- name: kustomize-mutating-webhook.xunholy.com
+  admissionReviewVersions: ["v1"]
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  # TODO: Determine if flux-system should be ignored
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values: ["flux-system"]
+  objectSelector: {}
+  reinvocationPolicy: Never
+  clientConfig:
+    service:
+      name: kustomize-mutating-webhook
+      namespace: flux-system
+      path: /mutate
+      port: 8443
+  rules:
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    apiVersions: ["v1"]
+    operations: ["CREATE", "UPDATE"]
+    resources: ["kustomizations"]
+    scope: '*'
+  sideEffects: None
+  timeoutSeconds: 10
