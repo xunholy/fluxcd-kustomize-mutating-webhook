@@ -16,6 +16,8 @@ spec:
       labels:
         <<: *labels
     spec:
+      nodeSelector:
+        kubernetes.io/arch: "amd64"
       serviceAccountName: kustomize-mutating-webhook
       automountServiceAccountToken: true
       securityContext:
