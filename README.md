@@ -26,8 +26,8 @@ Using Kubernetes Manifests
 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/fluxcd-kustomization-webhook.git
-cd fluxcd-kustomization-webhook
+git clone https://github.com/xunholy/fluxcd-kustomize-mutating-webhook.git
+cd fluxcd-kustomize-mutating-webhook
 ```
 
 2. Apply the Kubernetes Manifests
