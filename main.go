@@ -30,7 +30,8 @@ func init() {
 
 	// Determine log level from environment variable
 	if logLevel, ok := os.LookupEnv("LOG_LEVEL"); ok {
-		level, err := zerolog.ParseLevel(logLevel)
+		var err error
+		level, err = zerolog.ParseLevel(logLevel)
 		if err != nil {
 			log.Warn().Msgf("Invalid log level '%s'. Falling back to '%s'", logLevel, level)
 		}
@@ -101,7 +102,8 @@ func handleMutate(w http.ResponseWriter, r *http.Request) {
 				Allowed: true,
 			},
 		}
-		// Send the response to avoid locking deletcion
+
+		// Send the response to avoid locking deletion
 		respondWithAdmissionReview(w, admissionResponse)
 		return
 	}
@@ -117,13 +119,33 @@ func handleMutate(w http.ResponseWriter, r *http.Request) {
 
 	// Process the AdmissionReview request and create a patch
 	var patch []map[string]interface{}
-	for key, value := range appConfig {
-		patchOperation := map[string]interface{}{
+
+	// Ensure /spec/postBuild exists
+	if _, found, _ := unstructured.NestedMap(obj.Object, "spec", "postBuild"); !found {
+		patch = append(patch, map[string]interface{}{
 			"op":    "add",
-			"path":  "/spec/postBuild/substitute/" + key,
+			"path":  "/spec/postBuild",
+			"value": map[string]interface{}{},
+		})
+	}
+
+	// Ensure /spec/postBuild/substitute exists
+	if _, found, _ := unstructured.NestedMap(obj.Object, "spec", "postBuild", "substitute"); !found {
+		patch = append(patch, map[string]interface{}{
+			"op":    "add",
+			"path":  "/spec/postBuild/substitute",
+			"value": map[string]interface{}{},
+		})
+	}
+
+	// Add key-value pairs from appConfig to /spec/postBuild/substitute
+	for key, value := range appConfig {
+		escapedKey := escapeJsonPointer(key)
+		patch = append(patch, map[string]interface{}{
+			"op":    "add",
+			"path":  "/spec/postBuild/substitute/" + escapedKey,
 			"value": value,
-		}
-		patch = append(patch, patchOperation)
+		})
 	}
 	patchBytes, _ := json.Marshal(patch)
 
@@ -162,6 +184,13 @@ func respondWithAdmissionReview(w http.ResponseWriter, admissionResponse v1.Admi
 	}
 }
 
+// escapeJsonPointer escapes special characters in JSON pointer
+func escapeJsonPointer(value string) string {
+	value = strings.ReplaceAll(value, "~", "~0")
+	value = strings.ReplaceAll(value, "/", "~1")
+	return value
+}
+
 func main() {
 	// Log the starting of the server
 	log.Info().Msg("Starting the webhook server on port 8443")
@@ -170,9 +199,15 @@ func main() {
 	configMapPath := "/etc/config"
 	appConfig = readConfigMap(configMapPath)
 
+	log.Debug().Msg("Loaded appConfig:")
+	for key, value := range appConfig {
+		log.Debug().Msgf("Config - Key: %s, Value: %s", key, value)
+	}
+
 	// Set up HTTP handler and server
 	http.HandleFunc("/mutate", handleMutate)
 	if err := http.ListenAndServeTLS(":8443", "/etc/webhook/certs/tls.crt", "/etc/webhook/certs/tls.key", nil); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start server")
+		os.Exit(1)
 	}
 }

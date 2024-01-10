@@ -7,14 +7,17 @@ metadata:
   labels:
     app: *name
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels: &labels
       app: *name
   template:
     metadata:
-      labels: *labels
+      labels:
+        <<: *labels
     spec:
+      serviceAccountName: kustomize-mutating-webhook
+      automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -22,6 +25,7 @@ spec:
       containers:
       - name: webhook
         image: ghcr.io/xunholy/images/kustomize-mutating-webhook:latest
+        imagePullPolicy: Always
         env:
         - name: LOG_LEVEL
           value: info
@@ -31,6 +35,7 @@ spec:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsUser: 1000
+          runAsGroup: 1000
           capabilities:
             drop:
               - ALL
