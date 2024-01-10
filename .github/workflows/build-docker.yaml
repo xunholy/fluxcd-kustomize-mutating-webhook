@@ -44,4 +44,4 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/xunholy/images/kustomize-mutating-webhook:latest
+            ghcr.io/xunholy/kustomize-mutating-webhook:latest

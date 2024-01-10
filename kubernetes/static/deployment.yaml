@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: webhook
-        image: ghcr.io/xunholy/images/kustomize-mutating-webhook:latest
+        image: ghcr.io/xunholy/kustomize-mutating-webhook:latest
         imagePullPolicy: Always
         env:
         - name: LOG_LEVEL
