@@ -11,6 +11,11 @@ spec:
   selector:
     matchLabels: &labels
       app: *name
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   template:
     metadata:
       labels:
@@ -25,33 +30,67 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: webhook
-        image: ghcr.io/xunholy/kustomize-mutating-webhook:latest
-        imagePullPolicy: Always
-        env:
-        - name: LOG_LEVEL
-          value: info
-        ports:
-        - containerPort: 8443
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsUser: 1000
-          runAsGroup: 1000
-          capabilities:
-            drop:
-              - ALL
-        volumeMounts:
-        - name: webhook-certs
-          mountPath: /etc/webhook/certs
-          readOnly: true
-        - name: cluster-config
-          mountPath: /etc/config
-          readOnly: true
+        - name: webhook
+          image: ghcr.io/xunholy/kustomize-mutating-webhook:latest
+          imagePullPolicy: Always
+          env:
+            - name: LOG_LEVEL
+              value: info
+            - name: RATE_LIMIT
+              value: "100"
+          ports:
+            - containerPort: 8443
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+            - name: cluster-config
+              mountPath: /etc/config
+              readOnly: true
       volumes:
-      - name: webhook-certs
-        secret:
-          secretName: kustomize-mutating-webhook-tls
-      - name: cluster-config
-        configMap:
-          name: cluster-config
+        - name: webhook-certs
+          secret:
+            secretName: kustomize-mutating-webhook-tls
+        - name: cluster-config
+          configMap:
+            name: cluster-config
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kustomize-mutating-webhook-pdb
+  namespace: flux-system
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: kustomize-mutating-webhook

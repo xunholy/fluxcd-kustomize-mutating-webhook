@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build, Test, and Push Docker Images
 
 on:
   workflow_dispatch: {}
@@ -6,11 +6,38 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/build-docker.yaml
-      - Dockerfile
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/build-docker.yaml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - ".github/workflows/build-docker.yaml"
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Run tests
+        run: go test -v ./...
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,13 +65,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=$(date +'%Y.%m.%d')-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and Push
-        if: github.ref != 'refs/heads/master'
         uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5
         with:
           context: .
           file: Dockerfile
-          platforms: linux/amd64
-          push: true
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/xunholy/kustomize-mutating-webhook:latest
+            ghcr.io/xunholy/kustomize-mutating-webhook:${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
