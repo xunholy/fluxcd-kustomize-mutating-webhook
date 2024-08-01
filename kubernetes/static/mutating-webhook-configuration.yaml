@@ -6,30 +6,33 @@ metadata:
   namespace: flux-system
   annotations:
     cert-manager.io/inject-ca-from: flux-system/kustomize-mutating-webhook
+  labels:
+    app: kustomize-mutating-webhook
 webhooks:
-- name: kustomize-mutating-webhook.xunholy.com
-  admissionReviewVersions: ["v1"]
-  failurePolicy: Fail
-  matchPolicy: Equivalent
-  # TODO: Determine if flux-system should be ignored
-  namespaceSelector:
-    matchExpressions:
-      - key: kubernetes.io/metadata.name
-        operator: NotIn
-        values: ["flux-system"]
-  objectSelector: {}
-  reinvocationPolicy: Never
-  clientConfig:
-    service:
-      name: kustomize-mutating-webhook
-      namespace: flux-system
-      path: /mutate
-      port: 8443
-  rules:
-  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
-    apiVersions: ["v1"]
-    operations: ["CREATE", "UPDATE"]
-    resources: ["kustomizations"]
-    scope: '*'
-  sideEffects: None
-  timeoutSeconds: 10
+  - name: kustomize-mutating-webhook.xunholy.com
+    admissionReviewVersions: ["v1"]
+    # TODO: Set Ignore if issues persist and kustomization has already been patched
+    failurePolicy: Fail
+    matchPolicy: Equivalent
+    # NOTE: Expected behaviour is that flux-system contains required secrets which can be directly added and not required to be patched.
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: ["flux-system"]
+    objectSelector: {}
+    reinvocationPolicy: Never
+    clientConfig:
+      service:
+        name: kustomize-mutating-webhook
+        namespace: flux-system
+        path: /mutate
+        port: 8443
+    rules:
+      - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["kustomizations"]
+        scope: "*"
+    sideEffects: None
+    timeoutSeconds: 30

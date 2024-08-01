@@ -107,6 +107,78 @@ kubectl apply -k kubernetes/static
 
 You can verify the correct values are being collected by either using the `debug` log level which outputs the values on start-up, alternatively you may also verify by inspecting a Kustomization resource that has been mutated.
 
+## Testing and Benchmarking
+
+This project includes unit tests and benchmarks to ensure reliability and performance. Here's how to run them and interpret the results:
+
+### Running Tests
+
+To run the unit tests, use the following command in the project root:
+
+```bash
+go test -v ./...
+```
+
+This will run all tests and provide verbose output. A successful test run will show "PASS" for each test case.
+
+### Running Benchmarks
+
+To run the benchmarks, use:
+
+```bash
+go test -bench=. -benchmem
+```
+
+This command runs all benchmarks and includes memory allocation statistics.
+
+### Interpreting Results
+
+#### Test Results
+
+After running the tests, you should see output similar to:
+
+```log
+=== RUN   TestMutatingWebhook
+=== RUN   TestMutatingWebhook/Add_postBuild_and_substitute
+[... more test output ...]
+PASS
+ok      github.com/xunholy/fluxcd-mutating-webhook      0.015s
+```
+
+- "PASS" indicates all tests have passed successfully.
+- The time at the end (0.015s in this example) shows how long the tests took to run.
+
+#### Benchmark Results
+
+Benchmark results will look something like this:
+
+```log
+4:47PM INF Request details Kind=Kustomization Name= Namespace= Resource= UID=
+   25410             41239 ns/op
+PASS
+ok      github.com/xunholy/fluxcd-mutating-webhook      1.535s
+```
+
+Here's how to interpret these results:
+
+- The first line shows a log output from the benchmark run.
+- "25410" is the number of iterations the benchmark ran.
+- "41239 ns/op" means each operation took an average of 41,239 nanoseconds (about 0.04 milliseconds).
+- "PASS" indicates the benchmark completed successfully.
+- "1.535s" is the total time taken for all benchmark runs.
+
+### Importance of Testing and Benchmarking
+
+Regular testing and benchmarking are crucial for several reasons:
+
+1. **Reliability**: Tests ensure that the webhook behaves correctly under various scenarios.
+2. **Performance Monitoring**: Benchmarks help track the webhook's performance over time, allowing us to detect and address any performance regressions.
+3. **Optimization**: Benchmark results can guide optimization efforts by identifying slow operations.
+4. **Confidence in Changes**: Running tests and benchmarks before and after changes helps ensure that modifications don't introduce bugs or performance issues.
+
+We encourage contributors to run tests and benchmarks locally before submitting pull requests, and to include new tests for any added functionality.
+
+
 ## License
 
 Distributed under the Apache 2.0 License. See [LICENSE](./LICENSE) for more information.
