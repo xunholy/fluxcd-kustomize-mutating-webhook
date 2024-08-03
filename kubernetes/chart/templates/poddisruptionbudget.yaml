@@ -1,0 +1,14 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}-pdb
+  labels:
+    {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "kustomize-mutating-webhook.selectorLabels" . | nindent 6 }}
+{{- end }}

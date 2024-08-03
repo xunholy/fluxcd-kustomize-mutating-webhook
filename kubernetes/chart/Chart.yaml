@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kustomize-mutating-webhook
+description: A Helm chart for FluxCD Kustomize Mutating Webhook
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

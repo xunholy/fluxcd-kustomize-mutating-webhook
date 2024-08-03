@@ -1,0 +1,98 @@
+# {{ template "chart.name" . }}
+
+{{ template "chart.versionBadge" . }}{{ template "chart.typeBadge" . }}{{ template "chart.appVersionBadge" . }}
+
+{{ template "chart.description" . }}
+
+## Introduction
+
+This Helm chart deploys a mutating webhook for FluxCD Kustomization resources. It extends the functionality of postBuild substitutions beyond the scope of a single namespace, allowing the use of global configuration variables stored in a central namespace.
+
+## Prerequisites
+
+- Kubernetes {{ template "kubeVersion" . }}
+- Helm v3+
+- FluxCD installed in the cluster
+- cert-manager for managing TLS certificates
+
+## Installing the Chart
+
+To install the chart with the release name `fluxcd-mutating-webhook`:
+
+```console
+$ helm repo add fluxcd-mutating-webhook https://xunholy.github.io/fluxcd-mutating-webhook/
+$ helm install fluxcd-mutating-webhook fluxcd-mutating-webhook/{{ template "chart.name" . }}
+```
+
+## Uninstalling the Chart
+
+To uninstall/delete the `my-release` deployment:
+
+```console
+$ helm delete my-release
+```
+
+## Configuration
+
+The following table lists the configurable parameters of the {{ template "chart.name" . }} chart and their default values.
+
+{{ template "chart.valuesTable" . }}
+
+Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
+
+```console
+$ helm install my-release myrepo/{{ template "chart.name" . }} --set replicaCount=3
+```
+
+Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
+
+```console
+$ helm install my-release myrepo/{{ template "chart.name" . }} -f values.yaml
+```
+
+## TLS Configuration
+
+This chart uses cert-manager to manage TLS certificates for the webhook. Ensure that cert-manager is properly set up in your cluster and that you've configured the `certManager` values in this chart to use the correct issuer.
+
+## Customizing the Mutating Webhook
+
+The mutating webhook is configured to intercept CREATE and UPDATE operations on Kustomization resources. You can customize this behavior by modifying the `webhook` values in the chart.
+
+## Monitoring and Logging
+
+The webhook server includes `/health` and `/ready` endpoints for monitoring. Configure your preferred monitoring solution to track these endpoints.
+
+Logs are output to stdout and can be collected using your cluster's logging solution.
+
+## Troubleshooting
+
+If you encounter issues with the webhook, check the following:
+
+1. Ensure the webhook pod is running:
+   ```
+   kubectl get pods -l app.kubernetes.io/name={{ template "chart.name" . }}
+   ```
+
+2. Check the logs of the webhook pod:
+   ```
+   kubectl logs -l app.kubernetes.io/name={{ template "chart.name" . }}
+   ```
+
+3. Verify the MutatingWebhookConfiguration:
+   ```
+   kubectl get mutatingwebhookconfigurations
+   ```
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+---
+
+For more information on using Helm, refer to the [Helm Documentation](https://helm.sh/docs/).

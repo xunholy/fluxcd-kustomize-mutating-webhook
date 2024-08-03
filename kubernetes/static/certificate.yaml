@@ -7,6 +7,10 @@ metadata:
 spec:
   secretName: kustomize-mutating-webhook-tls
   dnsNames:
-  - kustomize-mutating-webhook.flux-system.svc
+    - kustomize-mutating-webhook.flux-system.svc
+    - kustomize-mutating-webhook.flux-system.svc.cluster.local
   issuerRef:
+    kind: Issuer
     name: selfsigned-issuer
+  duration: 1h
+  renewBefore: 30m

@@ -1,0 +1,34 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}.xunholy.com
+  labels:
+    {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "kustomize-mutating-webhook.fullname" . }}
+  {{- end }}
+webhooks:
+  - name: {{ include "kustomize-mutating-webhook.fullname" . }}.xunholy.com
+    admissionReviewVersions: ["v1"]
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    matchPolicy: Equivalent
+    namespaceSelector:
+      {{- toYaml .Values.webhook.namespaceSelector | nindent 6 }}
+    objectSelector: {}
+    reinvocationPolicy: Never
+    clientConfig:
+      service:
+        name: {{ include "kustomize-mutating-webhook.fullname" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /mutate
+        port: {{ .Values.service.port }}
+    rules:
+      - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["kustomizations"]
+        scope: "*"
+    sideEffects: None
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}

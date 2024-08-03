@@ -1,0 +1,55 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "kubernetes/chart/**"
+  workflow_dispatch:
+
+env:
+  CHART_PATH: ./kubernetes/chart
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.9.0
+
+      - name: Install Helm Docs
+        run: |
+          curl -L https://github.com/norwoodj/helm-docs/releases/download/v1.11.0/helm-docs_1.11.0_Linux_x86_64.tar.gz | tar xz
+          sudo mv helm-docs /usr/local/bin/helm-docs
+
+      - name: Generate README
+        run: |
+          cd ${{ env.CHART_PATH }}
+          helm-docs
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add ${{ env.CHART_PATH }}/README.md
+          git commit -m "Update Helm chart README" || echo "No changes to commit"
+          git push
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.5.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_CHARTS_REPO: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"

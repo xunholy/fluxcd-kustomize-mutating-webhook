@@ -6,6 +6,7 @@ resources:
   - deployment.yaml
   - issuer.yaml
   - mutating-webhook-configuration.yaml
-  - network-policy.yaml
+  # TODO: Needs attention as CIDR is different per cluster
+  # - network-policy.yaml
   - service.yaml
   - serviceaccount.yaml
