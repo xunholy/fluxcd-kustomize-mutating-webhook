@@ -97,7 +97,9 @@ func (cw *CertWatcher) Watch() error {
 			if !ok {
 				return errors.New("watcher channel closed")
 			}
-			if event.Op&fsnotify.Write == fsnotify.Write {
+			// Each time a certificate is renewed, there's a series of file system events (CREATE, CHMOD, CREATE, RENAME, CREATE and REMOVE)
+			// Trigger certificate reload on the last event: REMOVE
+			if event.Op&fsnotify.Remove == fsnotify.Remove {
 				log.Info().Msg("Certificate files modified. Reloading...")
 				if err := cw.loadCertificate(); err != nil {
 					log.Error().Err(err).Msg("Failed to reload certificate")
