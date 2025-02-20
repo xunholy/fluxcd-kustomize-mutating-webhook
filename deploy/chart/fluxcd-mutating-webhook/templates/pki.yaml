@@ -1,34 +1,10 @@
+
+
+
+
 {{- if .Values.certManager.enabled -}}
 {{- if not .Values.certManager.CASClusterIssuer.enabled -}}
 ---
-# Create a selfsigned Issuer, in order to create a root CA certificate for
-# signing webhook serving certificates
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: {{ include "kustomize-mutating-webhook.fullname" . }}-ca
-  labels:
-    {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
-spec:
-  selfSigned: {}
----
-# Generate a CA Certificate used to sign certificates for the webhook
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: {{ include "kustomize-mutating-webhook.fullname" . }}-ca
-  labels:
-    {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
-spec:
-  secretName: {{ include "kustomize-mutating-webhook.fullname" . }}-ca
-  duration: 43800h # 5y
-  issuerRef:
-    name: {{ include "kustomize-mutating-webhook.fullname" . }}-ca
-    kind: Issuer
-  commonName: "ca.kustomize-mutating-webhook.cert-manager"
-  isCA: true
----
-# Create an Issuer that uses the above generated CA certificate to issue certs
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -36,8 +12,7 @@ metadata:
   labels:
     {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
 spec:
-  ca:
-    secretName: {{ include "kustomize-mutating-webhook.fullname" . }}-ca
+  selfSigned: {}
 {{- end }}
 ---
 apiVersion: cert-manager.io/v1
