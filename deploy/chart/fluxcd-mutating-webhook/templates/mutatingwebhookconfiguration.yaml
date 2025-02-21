@@ -24,6 +24,9 @@ webhooks:
         namespace: {{ .Release.Namespace }}
         path: /mutate
         port: {{ .Values.service.port }}
+    {{- if not .Values.certManager.enabled }}
+    caBundle: CA_PEM_B64
+    {{- end }}
     rules:
       - apiGroups: ["kustomize.toolkit.fluxcd.io"]
         apiVersions: ["v1"]
