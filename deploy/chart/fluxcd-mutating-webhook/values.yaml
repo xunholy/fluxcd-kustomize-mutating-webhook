@@ -29,6 +29,7 @@ securityContext:
 service:
   type: ClusterIP
   port: 8443
+  headless: true
 
 resources:
   requests:
