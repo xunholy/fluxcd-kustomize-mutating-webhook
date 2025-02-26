@@ -25,3 +25,6 @@ go.work
 
 # Generated binaries
 ./webhook
+
+deploy/certs/*.pem
+deploy/certs/*.csr
