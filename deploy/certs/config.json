@@ -4,20 +4,11 @@
             "expiry": "168h"
         },
         "profiles": {
-            "www": {
-                "expiry": "8760h",
-                "usages": [
-                    "signing",
-                    "key encipherment",
-                    "server auth"
-                ]
-            },
             "client": {
                 "expiry": "8760h",
                 "usages": [
-                    "signing",
-                    "key encipherment",
-                    "client auth"
+                    "digital signature",
+                    "key encipherment"
                 ]
             }
         }
