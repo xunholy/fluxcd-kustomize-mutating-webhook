@@ -9,7 +9,7 @@ populate-ca-bundle: template-manifests
 
 generate-certs:
 	# Generate CA Certificate and Key
-	cfssl gencert -initca deploy/certs/csr.json | cfssljson -bare deploy/certs/ca
+	cfssl gencert -initca deploy/certs/ca-csr.json | cfssljson -bare deploy/certs/ca
 
 	# Generate Webhook Certificate and Key
 	cfssl gencert \
