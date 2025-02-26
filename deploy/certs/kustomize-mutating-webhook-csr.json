@@ -1,15 +1,16 @@
 {
     "CN": "kustomize-mutating-webhook.flux-system.svc",
     "hosts": [
-        "kustomize-mutating-webhook.flux-system.svc"
+        "kustomize-mutating-webhook.flux-system.svc",
+        "kustomize-mutating-webhook.flux-system.svc.cluster.local"
     ],
     "key": {
-        "algo": "ecdsa",
-        "size": 256
+        "algo": "rsa",
+        "size": 2048
     },
     "names": [
         {
-            "C": "AUS",
+            "C": "AU",
             "ST": "VIC",
             "L": "Melbourne",
             "O": "Your Organisation",
