@@ -19,14 +19,14 @@ webhooks:
     objectSelector: {}
     reinvocationPolicy: Never
     clientConfig:
+      {{- if not .Values.certManager.enabled }}
+      caBundle: CA_PEM_B64
+      {{- end }}
       service:
         name: {{ include "kustomize-mutating-webhook.fullname" . }}
         namespace: {{ .Release.Namespace }}
         path: /mutate
         port: {{ .Values.service.port }}
-    {{- if not .Values.certManager.enabled }}
-    caBundle: CA_PEM_B64
-    {{- end }}
     rules:
       - apiGroups: ["kustomize.toolkit.fluxcd.io"]
         apiVersions: ["v1"]
