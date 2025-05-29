@@ -7,6 +7,8 @@ image:
   pullPolicy: Always
   tag: "2025.02.03-9fbd9806"
 
+imagePullSecrets: []
+
 nameOverride: ""
 fullnameOverride: ""
 
