@@ -1,7 +1,8 @@
 {
   "packages": {
     ".": {
-      "release-type": "go",
+      "release-type": "simple",
+      "package-name": "fluxcd-kustomize-mutating-webhook",
       "changelog-sections": [
         {
           "type": "feat",
@@ -18,16 +19,7 @@
         }
       ],
       "extra-files": [
-        {
-          "type": "yaml",
-          "path": "deploy/chart/fluxcd-mutating-webhook/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "deploy/chart/fluxcd-mutating-webhook/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        }
+        "deploy/chart/fluxcd-mutating-webhook/Chart.yaml"
       ]
     }
   }
