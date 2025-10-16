@@ -29,6 +29,13 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
 
+	// Start certificate watcher in a goroutine
+	go func() {
+		if err := server.CertWatcher.Watch(); err != nil {
+			log.Fatal().Err(err).Msg("Certificate watcher exited with error")
+		}
+	}()
+
 	go func() {
 		log.Info().Msgf("Starting the webhook server on %s", cfg.ServerAddress)
 		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
@@ -44,6 +51,8 @@ func waitForShutdown(server *webhook.Server) {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Info().Msg("Shutting down server...")
+	
+	server.CertWatcher.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), server.ShutdownTimeout)
 	defer cancel()

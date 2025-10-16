@@ -20,7 +20,7 @@ import (
 
 type Server struct {
 	*http.Server
-	certWatcher     *CertWatcher
+	CertWatcher     *CertWatcher
 	ShutdownTimeout time.Duration
 }
 
