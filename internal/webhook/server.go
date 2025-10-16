@@ -42,7 +42,7 @@ func NewServer(cfg config.Config) (*Server, error) {
 
 	return &Server{
 		Server:          server,
-		certWatcher:     certWatcher,
+		CertWatcher:     certWatcher,
 		ShutdownTimeout: 30 * time.Second,
 	}, nil
 }
