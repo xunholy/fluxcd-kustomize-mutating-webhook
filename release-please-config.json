@@ -1,0 +1,34 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "go",
+      "changelog-sections": [
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Bug Fixes"
+        },
+        {
+          "type": "chore",
+          "section": "Miscellaneous",
+          "hidden": false
+        }
+      ],
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "deploy/chart/fluxcd-mutating-webhook/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/chart/fluxcd-mutating-webhook/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
+    }
+  }
+}
