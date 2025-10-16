@@ -53,6 +53,9 @@ jobs:
       packages: write
       id-token: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Get tag to build
         id: get-tag
         run: |
@@ -62,17 +65,18 @@ jobs:
             echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
           else
             # Get latest release tag
-            latest_tag=$(gh release view --json tagName -q .tagName || echo "")
-            if [ -z "$latest_tag" ]; then
-              echo "No tag specified and no releases found"
-              exit 1
+            latest_tag=$(gh release view --json tagName -q .tagName 2>/dev/null || echo "")
+            if [ -n "$latest_tag" ]; then
+              echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+            else
+              echo "tag=" >> $GITHUB_OUTPUT
             fi
-            echo "tag=$latest_tag" >> $GITHUB_OUTPUT
           fi
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Checkout
+      - name: Checkout at tag
+        if: steps.get-tag.outputs.tag != ''
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ steps.get-tag.outputs.tag }}
