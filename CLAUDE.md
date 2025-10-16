@@ -141,17 +141,33 @@ This project uses [release-please](https://github.com/googleapis/release-please)
    - Updates version in `.release-please-manifest.json`
    - Updates `Chart.yaml` version and appVersion fields
 
-3. **Release Creation**: When the release PR is merged:
+3. **Release Creation**: When the release PR is merged, release-please:
    - Creates a GitHub release with the version tag (e.g., `v1.2.3`)
    - Publishes the changelog
 
-4. **Image Build**: The `build-docker.yaml` workflow automatically triggers on release creation and:
-   - Builds multi-arch Docker images (amd64, arm64)
-   - Tags images with semver tags: `v1.2.3`, `v1.2`, `v1`, `latest`
-   - Signs images with Cosign
-   - Pushes to `ghcr.io/$OWNER/kustomize-mutating-webhook`
+4. **Automated Builds**: When the release is published, two workflows trigger automatically:
+   - **Docker Images** (`build-docker.yaml`):
+     - Builds multi-arch Docker images (amd64, arm64)
+     - Tags images with semver tags: `v1.2.3`, `v1.2`, `v1`, `latest`
+     - Signs images with Cosign
+     - Pushes to `ghcr.io/$OWNER/kustomize-mutating-webhook`
+   - **Helm Chart** (`helm-release.yaml`):
+     - Packages the Helm chart with the updated version
+     - Pushes to `ghcr.io/$OWNER/charts/kustomize-mutating-webhook`
+     - Signs the chart with Cosign
 
-5. **Helm Chart**: After merging the release PR, manually update the Helm chart if needed, which triggers the `helm-release.yaml` workflow
+### Helm Chart Documentation
+
+When making changes to the Helm chart in a PR, the `helm-docs.yaml` workflow will:
+- Generate documentation from `values.yaml`
+- Validate that the README is up to date
+- Fail the PR if documentation needs updating
+
+To generate Helm docs locally:
+```bash
+cd deploy/chart/fluxcd-mutating-webhook
+helm-docs
+```
 
 ### Creating a Release
 
@@ -165,9 +181,51 @@ git push origin main
 
 # 3. Release-please creates a PR - review and merge it
 # 4. Release is created automatically with tag
-# 5. Docker images are built and pushed automatically
+# 5. Docker images and Helm chart are built and pushed automatically
 ```
+
+### Forcing a Release Without Changes
+
+If you need to create a release without any code changes (e.g., to republish artifacts or create an initial release), you have two options:
+
+**Option 1: Manually trigger release-please (Recommended)**
+1. Go to **Actions** → **Release Please**
+2. Click **Run workflow**
+3. This will create/update the release PR based on current commits
+
+**Option 2: Create an empty commit**
+```bash
+# Create an empty chore commit to trigger release-please
+git commit --allow-empty -m "chore: trigger release"
+git push origin main
+```
+
+Then merge the resulting release PR to create the release.
 
 ### Current Version
 
 The current version is tracked in `.release-please-manifest.json`. The Helm chart version and appVersion in `deploy/chart/fluxcd-mutating-webhook/Chart.yaml` are automatically updated by release-please.
+
+### Manual Re-triggering
+
+Both the Docker build and Helm chart workflows can be manually triggered:
+
+**Re-build Docker images for latest release:**
+1. Go to **Actions** → **Build, Test, and Push Docker Images**
+2. Click **Run workflow**
+3. Leave tag empty to use latest release, or specify a tag like `v1.2.3`
+
+**Re-publish Helm chart for latest release:**
+1. Go to **Actions** → **Publish Helm Chart**
+2. Click **Run workflow**
+3. This will use the version in `Chart.yaml` from main branch
+
+This is useful when you need to rebuild artifacts without creating a new release (e.g., after fixing registry issues or to update signatures).
+
+### Repository Settings Required
+
+For release-please to work, ensure the following repository settings are configured:
+
+1. Go to **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select **"Read and write permissions"**
+3. Check **"Allow GitHub Actions to create and approve pull requests"**

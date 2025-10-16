@@ -1,7 +1,12 @@
 name: Build, Test, and Push Docker Images
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (leave empty to use latest release tag)'
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -48,8 +53,29 @@ jobs:
       packages: write
       id-token: write
     steps:
+      - name: Get tag to build
+        id: get-tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            # Get latest release tag
+            latest_tag=$(gh release view --json tagName -q .tagName || echo "")
+            if [ -z "$latest_tag" ]; then
+              echo "No tag specified and no releases found"
+              exit 1
+            fi
+            echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.get-tag.outputs.tag }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3
@@ -83,10 +109,10 @@ jobs:
           tags: |
             type=ref,event=pr
             type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
+            type=semver,pattern={{major}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
 
       - name: Build and Push
         id: build

@@ -1,13 +1,8 @@
 name: Publish Helm Chart
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "deploy/chart/**"
-  pull_request:
-    branches: ["main"]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -21,26 +16,7 @@ env:
   OWNER: ${{ github.repository_owner }}
 
 jobs:
-  pre-job:
-    name: Pre-Job
-    runs-on: ubuntu-latest
-    outputs:
-      any_changed: ${{ steps.changed-files.outputs.any_changed }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Get Changed Files
-        uses: tj-actions/changed-files@26a38635fc1173cc5820336ce97be6188d0de9f5 # v46.0.2
-        id: changed-files
-        with:
-          files: deploy/chart/**
-
-  release:
-    needs: pre-job
-    if: ${{ needs.pre-job.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+  publish-chart:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,26 +28,14 @@ jobs:
         uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
 
       - name: Install Cosign
-        if: ${{ github.event_name != 'pull_request' }}
         uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
 
       - name: Login to GHCR
-        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Helm Docs
-        run: |
-          curl -L https://github.com/norwoodj/helm-docs/releases/download/v1.11.0/helm-docs_1.11.0_Linux_x86_64.tar.gz | tar xz
-          sudo mv helm-docs /usr/local/bin/helm-docs
-
-      - name: Generate README
-        run: |
-          cd ${{ env.CHART_PATH }}
-          helm-docs
 
       - name: Get Chart Version
         id: chart-version
@@ -83,34 +47,8 @@ jobs:
         run: helm package ${{ env.CHART_PATH }}
 
       - name: Push OCI Chart
-        if: ${{ github.event_name != 'pull_request' }}
         run: |
           helm push kustomize-mutating-webhook-${{ steps.chart-version.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ env.OWNER }}/charts
 
       - name: Sign Chart with Cosign
-        if: ${{ github.event_name != 'pull_request' }}
         run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.OWNER }}/charts/kustomize-mutating-webhook:${{ steps.chart-version.outputs.version }}
-
-      - name: Commit README changes
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add ${{ env.CHART_PATH }}/README.md
-          git commit -m "Update Helm chart README" || echo "No changes to commit"
-          git push
-
-      - name: Configure Git for chart-releaser
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Run chart-releaser
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: helm/chart-releaser-action@v1.6.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-        with:
-          charts_dir: deploy/chart
-          skip_existing: false
