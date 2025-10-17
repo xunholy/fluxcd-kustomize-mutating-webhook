@@ -24,7 +24,7 @@
       ]
     },
     "deploy/chart/kustomize-mutating-webhook": {
-      "package-name": "kustomize-mutating-webhook",
+      "package-name": "kustomize-mutating-webhook-chart",
       "release-type": "helm",
       "changelog-sections": [
         {
