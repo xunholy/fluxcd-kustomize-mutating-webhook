@@ -5,7 +5,7 @@
   "tag-separator": "-",
   "packages": {
     "kustomize-mutating-webhook": {
-      "package-name": "app",
+      "package-name": "kustomize-mutating-webhook",
       "release-type": "go",
       "changelog-sections": [
         {
