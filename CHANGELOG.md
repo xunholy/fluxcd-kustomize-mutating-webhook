@@ -1,0 +1,53 @@
+# Changelog
+
+## 1.0.0 (2025-10-17)
+
+
+### Features
+
+* add helm chart ([9a1ae9a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/9a1ae9a217c54dfbbde23b4c160c7448e1ce6fb1))
+* Add initial FluxCD mutating webhook ([6119d8a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/6119d8af733adafd2c15adc6e22651ce613ac16e))
+* Add support for (pod) annotations ([f8c454c](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/f8c454c295bfb8146d0f443325e3fad4ddaf4788))
+* Add support for multiple sources ([c74f326](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/c74f326e463991f01823f52d6da6bb5c2a8ad00a))
+* Allow recursive processing of config dir ([eaac685](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/eaac6856d727d49d1370bbb692effc70025415f4))
+* **chart:** add ability to define imagePullSecrets ([6f3602d](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/6f3602d74e926d564540e38ae271dbe81a0c964a))
+* **helm:** Allow specifying optional field ([8924701](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/8924701b2a326cf378580660c12de1e4fd068ad5))
+* implement cert reloading and add tests ([1d8bddd](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/1d8bdddc5dc3d109e529f167c2cff6cb18a32ad9))
+* Implement multi-arch build ([374aa50](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/374aa50dd9ab8b9fa36648e46837a0c9b6ee4c4e))
+* Implement multi-arch Dockerfile ([e591ff2](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/e591ff20c4a4dc6f49a6c808685aad937ff5984c))
+* massive improvements ([724c475](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/724c47533c66cf3dff4cadd7776399e6a32099e0))
+* Remove otel for now ([2de42f0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/2de42f0ae64fa55540bb0d886cabbd7eb72182ca))
+* Service is ready for connections even without loaded config ([cb2c102](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/cb2c1022d6c4aa0e40a6e21d1863dc2adb7dd032))
+* setup release please workflow ([5814379](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/581437949368b86371e20303dca813d026f8cc40))
+* update logic and tests ([4bcb9cf](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/4bcb9cff06cde4fd8f20c97f49a4d01b8ffbc986))
+* update readme in chart ([0d53afb](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/0d53afb47454c7567bdc1078f32cb4bed24350c0))
+* update release flows ([207d3c2](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/207d3c2661b09b368d3d4cecf32fa5d0a708d688))
+* update release please config ([9313ea3](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/9313ea36c9633dac407285e0160e939ce54c9df0))
+* Watch for certificate on change. ([f30651e](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/f30651e1002157e87f25dcf506af890b57c16a69))
+
+
+### Bug Fixes
+
+* add missing files ([097f676](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/097f6768ca1e9c1c05743440e9135895bfa91139))
+* chart and ports ([54f73fe](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/54f73feccb2bb4ab4f385198a3f1b2d6ae1063b9))
+* chart release ([3eed175](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/3eed175c107780967cbf8e7070f1999916fdf12e))
+* chart release naming ([5047f2f](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/5047f2f280becff7303bbecec1c2bdf89b290afa))
+* defaults and chart values ([1d24701](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/1d24701b4c4dbd2457ddb15a2bc1e6f4c3618838))
+* docker build workflow ([1c9b17b](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/1c9b17b0d8d5c4208166c2d26cc3f6eca14d69b4))
+* docker build workflow ([4623d85](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/4623d853cc48e1f0918e4604417f55689001139e))
+* escaped chars and workflows ([0e3f997](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/0e3f99745805157f91db27019c8099cb31378b34))
+* Fix some small Helm chart niggles ([6cf0c29](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/6cf0c2911462c88ca1d92d774d09adc3465973ed))
+* helm releases ([dbd8b3e](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/dbd8b3e0d50e5a4d5369cc840c4908e966335cb7))
+* Improve handling of non-existing config directory ([9a47e74](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/9a47e7473adf5f9fcf13599949e6782ac2ebf51b))
+* log router with consistent logging when debugging is enabled ([fecb694](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/fecb6941c63fcbe9d893fdfbbf60ad5cfb77d8e4))
+* lowercase sensitivity ([53406c6](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/53406c630bbb164e40f9abbd8a132298e00f0e18))
+* merge conflicts ([814d38e](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/814d38e14b91c52bd6a62dffbf76bdd00e71f57c))
+* networkpolicy and chart values ([1d57adf](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/1d57adf2d2bb856ce3844c80fbbb4edcac1e084a))
+* release please exclude dir ([42b88a0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/42b88a08b0563c25e9abd0d9e389860d28278ee1))
+* release please update ([f101de6](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/f101de6a7a4316b133717c52003f0db8d60e5cce))
+* Remove generated binary, updated gitignore ([7ca13c7](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/7ca13c7a89b2289345a094fddb5ab194a7d02706))
+* set default node architectur selector ([07a0741](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/07a07418884bc499d1f9fe28637018a655b66980))
+* The Helm Chart PKI had a duplicate certificate ([d9c522d](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/d9c522dcd74e322a463236493a3ddd3586ce0753))
+* Update charts for multi-arch ([60400ba](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/60400ba1ab7e04324c631e6869c5e4a4bad9c8b2))
+* Update the struct literal ([68fd9ba](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/68fd9baa5d42e1b35227c9394d195cd900d05c28))
+* Use non-blocking GRPC client ([f1c8531](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/f1c8531f80981bf7aa38b1cacf43e1c13b2c5d4c))
