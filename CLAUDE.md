@@ -11,15 +11,17 @@ This is a Kubernetes mutating webhook for FluxCD Kustomization resources. It dyn
 ### Building
 ```bash
 # Build the webhook binary
+cd kustomize-mutating-webhook
 go build -o webhook ./cmd/webhook
 
-# Build with Docker
+# Build with Docker (from repo root)
 docker build -t kustomize-mutating-webhook .
 ```
 
 ### Testing
 ```bash
 # Run all tests with verbose output
+cd kustomize-mutating-webhook
 go test -v ./...
 
 # Run benchmarks with memory stats
@@ -45,6 +47,30 @@ go test -v ./pkg/utils
 ```
 
 ### Kubernetes Deployment
+
+**Using Helm (OCI Registry)**
+```bash
+# Install from OCI registry
+helm install kustomize-mutating-webhook \
+  oci://ghcr.io/$OWNER/charts/kustomize-mutating-webhook \
+  --version 0.5.0 \
+  --namespace flux-system
+```
+
+**Using Helm (Traditional Repository)**
+```bash
+# Add the Helm repository
+helm repo add kustomize-mutating-webhook https://$OWNER.github.io/fluxcd-kustomize-mutating-webhook
+helm repo update
+
+# Install the chart
+helm install kustomize-mutating-webhook \
+  kustomize-mutating-webhook/kustomize-mutating-webhook \
+  --version 0.5.0 \
+  --namespace flux-system
+```
+
+**Using Static Manifests**
 ```bash
 # Deploy using static manifests
 kubectl apply -k deploy/static
@@ -60,7 +86,7 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 
 ### Core Components
 
-**Entry Point** (`cmd/webhook/main.go`)
+**Entry Point** (`kustomize-mutating-webhook/cmd/webhook/main.go`)
 - Loads and validates configuration from environment variables
 - Initializes logger with configurable log level
 - Reads configuration from mounted ConfigMaps/Secrets in `/etc/config`
@@ -68,19 +94,19 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 - Starts certificate watcher in a goroutine to hot-reload certificates
 - Handles graceful shutdown on SIGINT/SIGTERM
 
-**Configuration Management** (`internal/config/`)
+**Configuration Management** (`kustomize-mutating-webhook/internal/config/`)
 - `Config` struct holds all server configuration
 - Environment-based config with sensible defaults
 - Validation ensures required fields are present
 - Logger initialization with zerolog
 
-**Webhook Server** (`internal/webhook/`)
+**Webhook Server** (`kustomize-mutating-webhook/internal/webhook/`)
 - `server.go`: Sets up chi router with middleware (rate limiting, logging, recovery)
 - Exposes endpoints: `/mutate` (main webhook), `/health`, `/ready`, `/metrics`
 - TLS configuration uses certificate watcher for dynamic cert reloading
 - `certwatcher.go`: Watches certificate directory using fsnotify, reloads on file changes
 
-**Mutation Handler** (`internal/handlers/mutate.go`)
+**Mutation Handler** (`kustomize-mutating-webhook/internal/handlers/mutate.go`)
 - Receives AdmissionReview requests from Kubernetes API server
 - Filters for Kustomization resources only
 - Skips delete operations and resources with deletion timestamps
@@ -88,13 +114,13 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 - Patches are created for all keys in the global `AppConfig.Config`
 - Uses JSON Pointer escaping for keys with special characters
 
-**Configuration Reader** (`pkg/utils/utils.go`)
+**Configuration Reader** (`kustomize-mutating-webhook/pkg/utils/utils.go`)
 - `ReadConfigDirectory()`: Recursively walks config directory, reads all non-hidden files
 - Stores key-value pairs in thread-safe `AppConfig` (global singleton with RWMutex)
 - Keys are filenames, values are file contents
 - Used by mutation handler to inject values into Kustomizations
 
-**Metrics** (`internal/metrics/`)
+**Metrics** (`kustomize-mutating-webhook/internal/metrics/`)
 - Prometheus metrics for monitoring webhook performance
 - Tracks: total requests, mutation count, error count, request duration, rate limited requests
 
@@ -154,8 +180,10 @@ This project uses [release-please](https://github.com/googleapis/release-please)
      - Pushes to `ghcr.io/$OWNER/kustomize-mutating-webhook`
    - **Helm Chart** (`helm-release.yaml`) - Triggered by `helm-chart-v*` releases:
      - Packages the Helm chart with the updated version
-     - Pushes to `ghcr.io/$OWNER/charts/kustomize-mutating-webhook`
-     - Signs the chart with Cosign
+     - Pushes OCI chart to `ghcr.io/$OWNER/charts/kustomize-mutating-webhook`
+     - Signs OCI chart with Cosign
+     - Publishes traditional chart to GitHub Pages (https://$OWNER.github.io/fluxcd-kustomize-mutating-webhook)
+     - Creates GitHub release with chart tarball
 
 ### Helm Chart Documentation
 
@@ -166,7 +194,7 @@ When making changes to the Helm chart in a PR, the `helm-docs.yaml` workflow wil
 
 To generate Helm docs locally:
 ```bash
-cd deploy/chart/fluxcd-mutating-webhook
+cd deploy/chart/kustomize-mutating-webhook
 helm-docs
 ```
 
@@ -205,7 +233,7 @@ Then merge the resulting release PR to create the release.
 
 ### Current Version
 
-The current version is tracked in `.release-please-manifest.json`. The Helm chart version and appVersion in `deploy/chart/fluxcd-mutating-webhook/Chart.yaml` are automatically updated by release-please.
+The current version is tracked in `.release-please-manifest.json`. The Helm chart version and appVersion in `deploy/chart/kustomize-mutating-webhook/Chart.yaml` are automatically updated by release-please.
 
 ### Manual Re-triggering
 

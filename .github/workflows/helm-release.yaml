@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  CHART_PATH: ./deploy/chart/fluxcd-mutating-webhook
+  CHART_PATH: ./deploy/chart/kustomize-mutating-webhook
   REGISTRY: ghcr.io
   OWNER: ${{ github.repository_owner }}
 
@@ -52,5 +52,18 @@ jobs:
         run: |
           helm push kustomize-mutating-webhook-${{ steps.chart-version.outputs.version }}.tgz oci://${{ env.REGISTRY }}/${{ env.OWNER }}/charts
 
-      - name: Sign Chart with Cosign
+      - name: Sign OCI Chart with Cosign
         run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.OWNER }}/charts/kustomize-mutating-webhook:${{ steps.chart-version.outputs.version }}
+
+      - name: Configure Git for chart-releaser
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@a917fd15b20e8b64b94d9158ad54cd6345335584 # v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          CR_SKIP_EXISTING: "true"
+        with:
+          charts_dir: deploy/chart

@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 env:
-  CHART_PATH: ./deploy/chart/fluxcd-mutating-webhook
+  CHART_PATH: ./deploy/chart/kustomize-mutating-webhook
 
 jobs:
   generate-docs:

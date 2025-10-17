@@ -4,12 +4,9 @@
   "separate-pull-requests": false,
   "tag-separator": "-",
   "packages": {
-    ".": {
+    "kustomize-mutating-webhook": {
       "package-name": "app",
       "release-type": "go",
-      "exclude-paths": [
-        "deploy/chart"
-      ],
       "changelog-sections": [
         {
           "type": "feat",
@@ -26,7 +23,7 @@
         }
       ]
     },
-    "deploy/chart/fluxcd-mutating-webhook": {
+    "deploy/chart/kustomize-mutating-webhook": {
       "package-name": "kustomize-mutating-webhook",
       "release-type": "helm",
       "changelog-sections": [

@@ -8,11 +8,11 @@ ARG TARGETARCH
 WORKDIR /app
 
 # Copy module files first to leverage Docker caching
-COPY go.mod go.sum ./
+COPY kustomize-mutating-webhook/go.mod kustomize-mutating-webhook/go.sum ./
 RUN go mod download
 
 # Copy entire source
-COPY . .
+COPY kustomize-mutating-webhook/ .
 
 # Build the application targeting cmd/webhook/main.go
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
