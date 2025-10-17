@@ -10,7 +10,7 @@ This Helm chart deploys a mutating webhook for FluxCD Kustomization resources. I
 
 ## Prerequisites
 
-- Kubernetes {{ template "kubeVersion" . }}
+- Kubernetes {{ template "chart.kubeVersion" . }}
 - Helm v3+
 - FluxCD installed in the cluster
 - cert-manager for managing TLS certificates

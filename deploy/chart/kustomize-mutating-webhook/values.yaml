@@ -1,59 +1,89 @@
 # Default values for kustomize-mutating-webhook.
 
+# -- Number of webhook pod replicas
 replicas: 1
 
 image:
+  # -- Container image repository
   repository: ghcr.io/xunholy/kustomize-mutating-webhook
+  # -- Image pull policy
   pullPolicy: Always
+  # -- Image tag (overrides the image tag whose default is the chart appVersion)
   tag: "2025.02.03-9fbd9806"
 
+# -- Secrets for pulling images from private registries
 imagePullSecrets: []
 
+# -- Override the name of the chart
 nameOverride: ""
+# -- Override the full name of the release
 fullnameOverride: ""
 
 serviceAccount:
+  # -- Specifies whether a service account should be created
   create: true
+  # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
 
 podSecurityContext:
+  # -- Run container as non-root user
   runAsNonRoot: true
+  # -- User ID to run the container as
   runAsUser: 1000
+  # -- Group ID to run the container as
   runAsGroup: 1000
 
 securityContext:
+  # -- Prevent privilege escalation
   allowPrivilegeEscalation: false
+  # -- Mount root filesystem as read-only
   readOnlyRootFilesystem: true
   capabilities:
+    # -- Drop all capabilities
     drop:
       - ALL
 
 service:
+  # -- Kubernetes service type
   type: ClusterIP
+  # -- Service port for webhook server
   port: 8443
+  # -- Create a headless service (no cluster IP)
   headless: true
 
 resources:
   requests:
+    # -- CPU resource requests
     cpu: 100m
+    # -- Memory resource requests
     memory: 128Mi
   limits:
+    # -- CPU resource limits
     cpu: 500m
+    # -- Memory resource limits
     memory: 256Mi
 
+# -- Additional labels to add to all resources
 additionalLabels: {}
   # custom-label: "example"
+# -- Annotations to add to all resources
 annotations: {}
+# -- Annotations to add to the pod
 podAnnotations: {}
 
+# -- Tolerations for pod assignment
 tolerations: []
 
+# -- Affinity rules for pod assignment
 affinity: {}
 
 webhook:
+  # -- Failure policy for the mutating webhook (Fail or Ignore)
   failurePolicy: Fail
+  # -- Timeout in seconds for the webhook
   timeoutSeconds: 30
   namespaceSelector:
+    # -- Match expressions to select namespaces where the webhook should apply
     matchExpressions:
       - key: kubernetes.io/metadata.name
         operator: NotIn
@@ -61,33 +91,46 @@ webhook:
           - "flux-system"
 
 certManager:
+  # -- Enable cert-manager integration for TLS certificate management
   enabled: true
+  # -- Certificate duration (90 days default)
   certificateDuration: "2160h" # 90d
+  # -- Certificate renewal threshold (15 days before expiry)
   certificateRenewBefore: "360h" # 15d
   CASClusterIssuer:
+    # -- Enable AWS Private CA or Google CAS cluster issuer
     enabled: false
+    # -- API group for the CAS issuer (awspca.cert-manager.io or cas-issuer.jetstack.io)
     group: "awspca.cert-manager.io" # cas-issuer.jetstack.io|awspca.cert-manager.io
+    # -- Kind of CAS issuer (AWSPCAClusterIssuer or GoogleCASClusterIssuer)
     kind: "AWSPCAClusterIssuer" # GoogleCASClusterIssuer|AWSPCAClusterIssuer
+    # -- Name of the CAS cluster issuer
     name: casissuer-name
 
+# -- ConfigMaps to mount into the webhook container for substitution variables
 configMaps:
   - create: false
     name: cluster-config
     optional: false
     data: {}
 
+# -- Secrets to mount into the webhook container for substitution variables
 secrets: []
   # - name: my-cluster-secrets
   #   optional: true
 
 env:
+  # -- Log level (debug, info, warn, error, fatal, panic)
   LOG_LEVEL: info
+  # -- Rate limit for webhook requests per second
   RATE_LIMIT: "100"
 
-# Enable if you're using replicas: 3 or greater
 podDisruptionBudget:
+  # -- Enable pod disruption budget (recommended for replicas >= 3)
   enabled: false
+  # -- Minimum number of available pods during disruptions
   minAvailable: 2
 
 networkpolicy:
+  # -- Create a NetworkPolicy to restrict traffic to the webhook
   create: true

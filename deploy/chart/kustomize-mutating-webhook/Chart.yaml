@@ -4,3 +4,4 @@ description: A Helm chart for the Kustomize Mutating Webhook chart
 type: application
 version: 0.5.0
 appVersion: "0.5.0"
+kubeVersion: ">=1.19.0-0"
