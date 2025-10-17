@@ -1,8 +1,12 @@
 {
+  "include-component-in-tag": true,
+  "include-v-in-tag": true,
+  "separate-pull-requests": false,
+  "tag-separator": "-",
   "packages": {
     ".": {
+      "package-name": "app",
       "release-type": "go",
-      "component": "app",
       "changelog-sections": [
         {
           "type": "feat",
@@ -20,8 +24,8 @@
       ]
     },
     "deploy/chart/fluxcd-mutating-webhook": {
+      "package-name": "helm-chart",
       "release-type": "helm",
-      "component": "helm-chart",
       "changelog-sections": [
         {
           "type": "feat",
@@ -38,6 +42,5 @@
         }
       ]
     }
-  },
-  "group-pull-request-title-pattern": "chore: release ${version}"
+  }
 }
