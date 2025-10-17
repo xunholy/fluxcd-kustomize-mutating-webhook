@@ -126,7 +126,7 @@ The webhook intercepts FluxCD Kustomization resources before they're stored in e
 
 ## Release Process
 
-This project uses [release-please](https://github.com/googleapis/release-please) for automated semantic versioning and release management.
+This project uses [release-please](https://github.com/googleapis/release-please) for automated semantic versioning and release management with **multi-package support**.
 
 ### How It Works
 
@@ -137,21 +137,22 @@ This project uses [release-please](https://github.com/googleapis/release-please)
    - Add `!` after type or `BREAKING CHANGE:` in footer for major version bumps
 
 2. **Release PR Creation**: When commits are merged to `main`, release-please automatically:
-   - Creates/updates a release PR with changelog
-   - Updates version in `.release-please-manifest.json`
-   - Updates `Chart.yaml` version and appVersion fields
+   - Creates/updates **one grouped release PR** for both packages
+   - Updates versions in `.release-please-manifest.json`
+   - Updates `Chart.yaml` with both `version` and `appVersion` fields (via Helm release type)
 
-3. **Release Creation**: When the release PR is merged, release-please:
-   - Creates a GitHub release with the version tag (e.g., `v1.2.3`)
-   - Publishes the changelog
+3. **Release Creation**: When the release PR is merged, release-please creates **two separate releases**:
+   - **App Release**: Tagged as `app-v1.2.3` - triggers Docker image build
+   - **Helm Chart Release**: Tagged as `helm-chart-v1.2.3` - triggers Helm chart publish
+   - Both versions stay synchronized (e.g., both become v1.2.3)
 
-4. **Automated Builds**: When the release is published, two workflows trigger automatically:
-   - **Docker Images** (`build-docker.yaml`):
+4. **Automated Builds**: Each release triggers its corresponding workflow:
+   - **Docker Images** (`build-docker.yaml`) - Triggered by `app-v*` releases:
      - Builds multi-arch Docker images (amd64, arm64)
-     - Tags images with semver tags: `v1.2.3`, `v1.2`, `v1`, `latest`
+     - Tags images with clean semver: `v1.2.3`, `v1.2`, `v1`, `latest`
      - Signs images with Cosign
      - Pushes to `ghcr.io/$OWNER/kustomize-mutating-webhook`
-   - **Helm Chart** (`helm-release.yaml`):
+   - **Helm Chart** (`helm-release.yaml`) - Triggered by `helm-chart-v*` releases:
      - Packages the Helm chart with the updated version
      - Pushes to `ghcr.io/$OWNER/charts/kustomize-mutating-webhook`
      - Signs the chart with Cosign
@@ -210,10 +211,11 @@ The current version is tracked in `.release-please-manifest.json`. The Helm char
 
 Both the Docker build and Helm chart workflows can be manually triggered:
 
-**Re-build Docker images for latest release:**
+**Re-build Docker images for latest app release:**
 1. Go to **Actions** → **Build, Test, and Push Docker Images**
 2. Click **Run workflow**
-3. Leave tag empty to use latest release, or specify a tag like `v1.2.3`
+3. Leave tag empty to use latest `app-v*` release, or specify a tag like `v1.2.3`
+4. Note: Automatically finds and uses the latest `app-v*` release tag
 
 **Re-publish Helm chart for latest release:**
 1. Go to **Actions** → **Publish Helm Chart**
@@ -221,6 +223,14 @@ Both the Docker build and Helm chart workflows can be manually triggered:
 3. This will use the version in `Chart.yaml` from main branch
 
 This is useful when you need to rebuild artifacts without creating a new release (e.g., after fixing registry issues or to update signatures).
+
+### Version Synchronization
+
+The Helm chart's `appVersion` field automatically tracks the Go app version. When release-please creates releases:
+- The Helm release type updates both `Chart.yaml` `version` and `appVersion` fields
+- Both releases get the same version number (e.g., 0.6.0)
+- Tag names differ (`app-v0.6.0` vs `helm-chart-v0.6.0`) but versions match
+- This ensures the Helm chart always references the correct app version
 
 ### Repository Settings Required
 

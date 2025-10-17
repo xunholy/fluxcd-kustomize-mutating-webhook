@@ -18,6 +18,8 @@ env:
 jobs:
   publish-chart:
     runs-on: ubuntu-latest
+    # Only run on helm-chart releases or manual trigger
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'helm-chart-v')
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2

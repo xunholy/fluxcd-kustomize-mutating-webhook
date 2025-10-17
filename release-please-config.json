@@ -1,8 +1,8 @@
 {
   "packages": {
     ".": {
-      "release-type": "simple",
-      "package-name": "fluxcd-kustomize-mutating-webhook",
+      "release-type": "go",
+      "component": "app",
       "changelog-sections": [
         {
           "type": "feat",
@@ -17,10 +17,27 @@
           "section": "Miscellaneous",
           "hidden": false
         }
-      ],
-      "extra-files": [
-        "deploy/chart/fluxcd-mutating-webhook/Chart.yaml"
+      ]
+    },
+    "deploy/chart/fluxcd-mutating-webhook": {
+      "release-type": "helm",
+      "component": "helm-chart",
+      "changelog-sections": [
+        {
+          "type": "feat",
+          "section": "Features"
+        },
+        {
+          "type": "fix",
+          "section": "Bug Fixes"
+        },
+        {
+          "type": "chore",
+          "section": "Miscellaneous",
+          "hidden": false
+        }
       ]
     }
-  }
+  },
+  "group-pull-request-title-pattern": "chore: release ${version}"
 }
