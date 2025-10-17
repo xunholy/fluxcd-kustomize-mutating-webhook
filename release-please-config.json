@@ -7,6 +7,9 @@
     ".": {
       "package-name": "app",
       "release-type": "go",
+      "exclude-paths": [
+        "deploy/chart"
+      ],
       "changelog-sections": [
         {
           "type": "feat",
