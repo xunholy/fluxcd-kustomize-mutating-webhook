@@ -41,20 +41,8 @@ jobs:
         run: |
           git diff --exit-code ${{ env.CHART_PATH }}/README.md || echo "changed=true" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR if docs need updating
-        if: steps.git-check.outputs.changed == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '⚠️ Helm chart documentation is out of date. Please run `helm-docs` in `deploy/chart/kustomize-mutating-webhook/` and commit the changes.'
-            })
-
-      - name: Commit and push changes on main
-        if: steps.git-check.outputs.changed == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Commit and push generated documentation
+        if: steps.git-check.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
