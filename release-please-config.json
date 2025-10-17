@@ -27,7 +27,7 @@
       ]
     },
     "deploy/chart/fluxcd-mutating-webhook": {
-      "package-name": "helm-chart",
+      "package-name": "kustomize-mutating-webhook",
       "release-type": "helm",
       "changelog-sections": [
         {
