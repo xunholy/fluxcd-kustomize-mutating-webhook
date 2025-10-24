@@ -1,6 +1,6 @@
 # kustomize-mutating-webhook
 
-![Version: 0.6.0](https://img.shields.io/badge/Version-0.6.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.0](https://img.shields.io/badge/AppVersion-0.5.0-informational?style=flat-square)
+![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.0](https://img.shields.io/badge/AppVersion-0.5.0-informational?style=flat-square)
 
 A Helm chart for the Kustomize Mutating Webhook chart
 
@@ -54,7 +54,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | fullnameOverride | string | `""` | Override the full name of the release |
 | image.pullPolicy | string | `"Always"` | Image pull policy |
 | image.repository | string | `"ghcr.io/xunholy/kustomize-mutating-webhook"` | Container image repository |
-| image.tag | string | `"2025.02.03-9fbd9806"` | Image tag (overrides the image tag whose default is the chart appVersion) |
+| image.tag | string | `"main-fee1c33"` | Image tag (overrides the image tag whose default is the chart appVersion) |
 | imagePullSecrets | list | `[]` | Secrets for pulling images from private registries |
 | nameOverride | string | `""` | Override the name of the chart |
 | networkpolicy.create | bool | `true` | Create a NetworkPolicy to restrict traffic to the webhook |
