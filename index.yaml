@@ -3,6 +3,17 @@ entries:
   kustomize-mutating-webhook:
   - apiVersion: v2
     appVersion: 0.5.0
+    created: "2025-10-24T03:00:04.365533449Z"
+    description: A Helm chart for the Kustomize Mutating Webhook chart
+    digest: 5f11023644e8c257b631c90d128f75867a7a40e805497302da90d117a4f1da3e
+    kubeVersion: '>=1.19.0-0'
+    name: kustomize-mutating-webhook
+    type: application
+    urls:
+    - https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/releases/download/kustomize-mutating-webhook-0.7.0/kustomize-mutating-webhook-0.7.0.tgz
+    version: 0.7.0
+  - apiVersion: v2
+    appVersion: 0.5.0
     created: "2025-10-17T05:17:45.887559519Z"
     description: A Helm chart for the Kustomize Mutating Webhook chart
     digest: b4c1337fc428176469b017de2d1829659c93dc47484d981b9cf15bb765561348
@@ -112,4 +123,4 @@ entries:
     urls:
     - https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/releases/download/kustomize-mutating-webhook-0.2.2/kustomize-mutating-webhook-0.2.2.tgz
     version: 0.2.2
-generated: "2025-10-17T05:17:45.887605804Z"
+generated: "2025-10-24T03:00:04.365577922Z"
