@@ -20,8 +20,11 @@ func main() {
 	}
 	config.InitLogger(cfg.LogLevel)
 
+	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Reading configuration directory")
 	if err := utils.ReadConfigDirectory(cfg.ConfigDir); err != nil {
-		log.Warn().Err(err).Msg("Error while reading config directory")
+		log.Warn().Err(err).Str("config_dir", cfg.ConfigDir).Msg("Error while reading config directory")
+	} else {
+		log.Info().Msg("Initial configuration loaded")
 	}
 
 	configWatcher, err := utils.NewConfigWatcher(cfg.ConfigDir)
@@ -42,6 +45,7 @@ func main() {
 	}()
 
 	// Start config watcher in a goroutine
+	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Starting config watcher for hot-reload")
 	go func() {
 		if err := configWatcher.Watch(); err != nil {
 			log.Error().Err(err).Msg("Config watcher exited with error")

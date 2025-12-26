@@ -31,23 +31,60 @@ func NewConfigWatcher(configDir string) (*ConfigWatcher, error) {
 
 func (cw *ConfigWatcher) reloadConfig() {
 	oldCount := 0
+	oldKeys := make([]string, 0)
 	AppConfig.Mu.RLock()
 	oldCount = len(AppConfig.Config)
+	for key := range AppConfig.Config {
+		oldKeys = append(oldKeys, key)
+	}
 	AppConfig.Mu.RUnlock()
 
+	log.Info().Str("config_dir", cw.configDir).Msg("Reloading configuration from directory")
+
 	if err := ReadConfigDirectory(cw.configDir); err != nil {
-		log.Error().Err(err).Msg("Failed to reload configuration")
+		log.Error().
+			Err(err).
+			Str("config_dir", cw.configDir).
+			Int("old_count", oldCount).
+			Msg("Failed to reload configuration - keeping old config")
 		return
 	}
 
+	newCount := 0
+	newKeys := make([]string, 0)
+	addedKeys := make([]string, 0)
+	removedKeys := make([]string, 0)
+
 	AppConfig.Mu.RLock()
-	newCount := len(AppConfig.Config)
+	newCount = len(AppConfig.Config)
+	for key := range AppConfig.Config {
+		newKeys = append(newKeys, key)
+		if !contains(oldKeys, key) {
+			addedKeys = append(addedKeys, key)
+		}
+	}
+	for _, key := range oldKeys {
+		if !contains(newKeys, key) {
+			removedKeys = append(removedKeys, key)
+		}
+	}
 	AppConfig.Mu.RUnlock()
 
 	log.Info().
 		Int("old_count", oldCount).
 		Int("new_count", newCount).
+		Strs("added_keys", addedKeys).
+		Strs("removed_keys", removedKeys).
 		Msg("Configuration reloaded successfully")
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 func (cw *ConfigWatcher) Watch() error {
