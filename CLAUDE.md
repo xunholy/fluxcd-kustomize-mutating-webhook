@@ -50,23 +50,23 @@ go test -v ./pkg/utils
 
 **Using Helm (OCI Registry)**
 ```bash
-# Install from OCI registry
+# Install from OCI registry (replace $OWNER with repository owner, e.g., xunholy)
 helm install kustomize-mutating-webhook \
   oci://ghcr.io/$OWNER/charts/kustomize-mutating-webhook \
-  --version 0.5.0 \
+  --version 0.6.0 \
   --namespace flux-system
 ```
 
 **Using Helm (Traditional Repository)**
 ```bash
-# Add the Helm repository
+# Add the Helm repository (replace $OWNER with repository owner, e.g., xunholy)
 helm repo add kustomize-mutating-webhook https://$OWNER.github.io/fluxcd-kustomize-mutating-webhook
 helm repo update
 
 # Install the chart
 helm install kustomize-mutating-webhook \
   kustomize-mutating-webhook/kustomize-mutating-webhook \
-  --version 0.5.0 \
+  --version 0.6.0 \
   --namespace flux-system
 ```
 
@@ -89,9 +89,10 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 **Entry Point** (`kustomize-mutating-webhook/cmd/webhook/main.go`)
 - Loads and validates configuration from environment variables
 - Initializes logger with configurable log level
-- Reads configuration from mounted ConfigMaps/Secrets in `/etc/config`
+- Reads configuration from mounted ConfigMaps and/or Secrets in `/etc/config`
 - Creates and starts the HTTP server with TLS
-- Starts certificate watcher in a goroutine to hot-reload certificates
+- Starts certificate watcher in a goroutine to hot-reload TLS certificates
+- Starts config watcher in a goroutine to hot-reload ConfigMap and Secret changes
 - Handles graceful shutdown on SIGINT/SIGTERM
 
 **Configuration Management** (`kustomize-mutating-webhook/internal/config/`)
@@ -120,31 +121,48 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 - Keys are filenames, values are file contents
 - Used by mutation handler to inject values into Kustomizations
 
+**Configuration Watcher** (`kustomize-mutating-webhook/pkg/utils/configwatcher.go`)
+- `ConfigWatcher`: Monitors config directory for file changes using fsnotify
+- Automatically reloads configuration when ConfigMaps or Secrets are updated by Kubernetes
+- Supports any combination of ConfigMaps and Secrets mounted to the config directory
+- Reacts to Write, Create, Remove, and Rename events (handles Kubernetes atomic updates via symlink swapping)
+- Uses 100ms debounce to handle rapid successive changes
+- Preserves old config on reload failure (logs errors but doesn't crash webhook)
+- Thread-safe reload leveraging existing `AppConfig.Mu` RWMutex
+
 **Metrics** (`kustomize-mutating-webhook/internal/metrics/`)
 - Prometheus metrics for monitoring webhook performance
 - Tracks: total requests, mutation count, error count, request duration, rate limited requests
 
 ### Control Flow
 
-1. **Startup**: Load config → Initialize logger → Read config directory → Create server → Start cert watcher → Start HTTPS server
+1. **Startup**: Load config → Initialize logger → Read config directory → Create config watcher → Create server → Start cert watcher → Start config watcher → Start HTTPS server
 2. **Mutation Request**: Receive AdmissionReview → Validate it's a Kustomization → Create JSON patches for substitute values → Return patched AdmissionReview
 3. **Certificate Reload**: fsnotify detects cert file change → Reload certificate → New connections use updated cert
-4. **Shutdown**: SIGINT/SIGTERM → Stop cert watcher → Graceful server shutdown with 30s timeout
+4. **Configuration Reload**: fsnotify detects config directory change → Sleep 100ms (debounce) → Reload config directory → Update AppConfig atomically
+5. **Shutdown**: SIGINT/SIGTERM → Stop cert watcher → Stop config watcher → Graceful server shutdown with 30s timeout
 
 ### Key Design Decisions
 
 - **Global Config Singleton**: `utils.AppConfig` is a global variable with mutex-protected access, allowing all handlers to read injected values
 - **JSON Patch Strategy**: Adds `/spec/postBuild` and `/spec/postBuild/substitute` if missing, then adds individual key-value patches
 - **Certificate Watching**: Enables cert rotation without pod restart (important for cert-manager renewals)
+- **Config Hot-Reload**: ConfigMap/Secret changes propagate automatically within ~1 second without pod restart
 - **Rate Limiting**: Token bucket algorithm (default 100 req/s) prevents webhook overload
 - **Conditional Logging**: Request logging only enabled at debug level to reduce noise
 
 ### Important Configuration Notes
 
-- The webhook expects ConfigMaps/Secrets to be mounted at `/etc/config` (configurable via `CONFIG_DIR`)
-- By default, looks for a ConfigMap named `cluster-config`, but any mounted volumes work
+- The webhook expects ConfigMaps and/or Secrets to be mounted at `/etc/config` (configurable via `CONFIG_DIR`)
+- By default, looks for a ConfigMap named `cluster-config`, but any mounted volumes work (ConfigMaps, Secrets, or both)
 - All files in the config directory (and subdirectories) become available as substitute variables
-- Kubernetes mounts ConfigMap/Secret keys as files (filename = key, content = value)
+- Kubernetes mounts ConfigMap and Secret keys as files (filename = key, content = value)
+- **Hot-Reload**: Configuration changes are automatically detected and reloaded when Kubernetes updates mounted ConfigMaps or Secrets
+  - Supports any combination: ConfigMaps only, Secrets only, or mixed ConfigMaps and Secrets
+  - Changes propagate within ~1 second
+  - Reload failures preserve the old configuration
+  - Monitor reload events via logs or Prometheus metrics
+  - Example: Update a Secret key and watch it reload without pod restart
 
 ### FluxCD Integration
 
@@ -182,8 +200,12 @@ This project uses [release-please](https://github.com/googleapis/release-please)
      - Packages the Helm chart with the updated version
      - Pushes OCI chart to `ghcr.io/$OWNER/charts/kustomize-mutating-webhook`
      - Signs OCI chart with Cosign
-     - Publishes traditional chart to GitHub Pages (https://$OWNER.github.io/fluxcd-kustomize-mutating-webhook)
-     - Creates GitHub release with chart tarball
+   - **PR Builds** (`pr-build.yaml`) - Triggered by pull requests:
+     - Runs tests to validate PR changes
+     - Builds Docker image for linux/amd64 (fast builds for testing)
+     - Pushes test images tagged as `pr-{number}` and `pr-{number}-{sha}`
+     - Posts comment on PR with image details and usage instructions
+     - Images are unsigned (test images only)
 
 ### Helm Chart Documentation
 
@@ -234,6 +256,37 @@ Then merge the resulting release PR to create the release.
 ### Current Version
 
 The current version is tracked in `.release-please-manifest.json`. The Helm chart version and appVersion in `deploy/chart/kustomize-mutating-webhook/Chart.yaml` are automatically updated by release-please.
+
+### Testing Pull Requests
+
+The `pr-build.yaml` workflow automatically builds and pushes test images for all pull requests:
+
+1. **Automatic Build**: When you create or update a PR, a Docker image is built and pushed
+2. **Image Tags**:
+   - `ghcr.io/$OWNER/kustomize-mutating-webhook:pr-{number}` - Updated on each push to PR
+   - `ghcr.io/$OWNER/kustomize-mutating-webhook:pr-{number}-{sha}` - Immutable per commit
+3. **PR Comment**: A comment is automatically posted/updated with:
+   - Image tags and digest
+   - Instructions for testing the image with Helm or kubectl
+   - Commit SHA reference
+4. **Fast Builds**: Only builds for `linux/amd64` to reduce CI time (full multi-arch builds happen on release)
+
+**Testing a PR image:**
+```bash
+# Pull and test locally
+docker pull ghcr.io/$OWNER/kustomize-mutating-webhook:pr-123
+
+# Deploy to test cluster with Helm
+helm upgrade --install kustomize-mutating-webhook \
+  oci://ghcr.io/$OWNER/charts/kustomize-mutating-webhook \
+  --namespace flux-system \
+  --set image.tag=pr-123
+
+# Or with kubectl
+kubectl set image deployment/kustomize-mutating-webhook \
+  kustomize-mutating-webhook=ghcr.io/$OWNER/kustomize-mutating-webhook:pr-123 \
+  -n flux-system
+```
 
 ### Manual Re-triggering
 
