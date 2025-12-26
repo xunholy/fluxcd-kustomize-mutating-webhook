@@ -17,10 +17,12 @@ import (
 )
 
 func TestHandleMutate(t *testing.T) {
-	// Set up test config
+	// Set up test config with proper mutex locking
+	utils.AppConfig.Mu.Lock()
 	utils.AppConfig.Config = map[string]string{
 		"TEST_KEY": "test_value",
 	}
+	utils.AppConfig.Mu.Unlock()
 
 	tests := []struct {
 		name            string
@@ -137,9 +139,12 @@ func TestHandleMutate(t *testing.T) {
 }
 
 func TestCreatePatch(t *testing.T) {
+	// Set up test config with proper mutex locking
+	utils.AppConfig.Mu.Lock()
 	utils.AppConfig.Config = map[string]string{
 		"TEST_KEY": "test_value",
 	}
+	utils.AppConfig.Mu.Unlock()
 
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
