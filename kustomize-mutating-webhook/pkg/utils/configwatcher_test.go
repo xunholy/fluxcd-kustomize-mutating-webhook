@@ -13,7 +13,7 @@ import (
 func TestNewConfigWatcher(t *testing.T) {
 	tempDir := t.TempDir()
 
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	require.NotNil(t, watcher)
 	assert.Equal(t, tempDir, watcher.configDir)
@@ -37,7 +37,7 @@ func TestConfigWatcher_Watch_FileModify(t *testing.T) {
 	assert.Equal(t, "initial-value", AppConfig.Config["key1"])
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -76,7 +76,7 @@ func TestConfigWatcher_Watch_FileCreate(t *testing.T) {
 	assert.Len(t, AppConfig.Config, 1)
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -119,7 +119,7 @@ func TestConfigWatcher_Watch_FileDelete(t *testing.T) {
 	assert.Len(t, AppConfig.Config, 2)
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -162,7 +162,7 @@ func TestConfigWatcher_ErrorHandling(t *testing.T) {
 	initialValue := AppConfig.Config["key1"]
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -196,7 +196,7 @@ func TestConfigWatcher_Stop(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 
 	// Start watching in goroutine
@@ -233,7 +233,7 @@ func TestConfigWatcher_Debouncing(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -277,7 +277,7 @@ func TestConfigWatcher_HiddenFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 
@@ -324,7 +324,7 @@ func TestConfigWatcher_MixedConfigMapAndSecret(t *testing.T) {
 	AppConfig.Mu.RUnlock()
 
 	// Create and start watcher
-	watcher, err := NewConfigWatcher(tempDir)
+	watcher, err := NewConfigWatcher(tempDir, false, nil)
 	require.NoError(t, err)
 	defer watcher.Stop()
 

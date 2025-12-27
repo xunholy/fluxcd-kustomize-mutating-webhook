@@ -27,7 +27,23 @@ func main() {
 		log.Info().Msg("Initial configuration loaded")
 	}
 
-	configWatcher, err := utils.NewConfigWatcher(cfg.ConfigDir)
+	// Create Kustomization updater if auto-update is enabled
+	var kustomizationUpdater *utils.KustomizationUpdater
+	var err error
+	if cfg.AutoUpdateKustomizations {
+		kustomizationUpdater, err = utils.NewKustomizationUpdater(cfg.AutoUpdateExcludeNamespaces)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to create Kustomization updater")
+		}
+		log.Info().
+			Bool("auto_update", true).
+			Strs("exclude_namespaces", cfg.AutoUpdateExcludeNamespaces).
+			Msg("Kustomization auto-update enabled")
+	} else {
+		log.Info().Bool("auto_update", false).Msg("Kustomization auto-update disabled")
+	}
+
+	configWatcher, err := utils.NewConfigWatcher(cfg.ConfigDir, cfg.AutoUpdateKustomizations, kustomizationUpdater)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create config watcher")
 	}

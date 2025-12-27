@@ -12,21 +12,25 @@ import (
 )
 
 type ConfigWatcher struct {
-	configDir string
-	watcher   *fsnotify.Watcher
-	done      chan struct{}
+	configDir             string
+	watcher               *fsnotify.Watcher
+	done                  chan struct{}
+	kustomizationUpdater  *KustomizationUpdater
+	autoUpdate            bool
 }
 
-func NewConfigWatcher(configDir string) (*ConfigWatcher, error) {
+func NewConfigWatcher(configDir string, autoUpdate bool, kustomizationUpdater *KustomizationUpdater) (*ConfigWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
 	cw := &ConfigWatcher{
-		configDir: configDir,
-		watcher:   watcher,
-		done:      make(chan struct{}),
+		configDir:            configDir,
+		watcher:              watcher,
+		done:                 make(chan struct{}),
+		kustomizationUpdater: kustomizationUpdater,
+		autoUpdate:           autoUpdate,
 	}
 	return cw, nil
 }
@@ -78,6 +82,15 @@ func (cw *ConfigWatcher) reloadConfig() {
 		Strs("added_keys", addedKeys).
 		Strs("removed_keys", removedKeys).
 		Msg("Configuration reloaded successfully")
+
+	// Trigger Kustomization updates if auto-update is enabled
+	if cw.autoUpdate && cw.kustomizationUpdater != nil {
+		go func() {
+			if err := cw.kustomizationUpdater.TriggerUpdateAll(); err != nil {
+				log.Error().Err(err).Msg("Failed to trigger Kustomization updates")
+			}
+		}()
+	}
 }
 
 func contains(slice []string, item string) bool {

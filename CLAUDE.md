@@ -44,6 +44,8 @@ go test -v ./pkg/utils
 # - KEY_FILE: TLS key path (default: /etc/webhook/certs/tls.key)
 # - CONFIG_DIR: config directory path (default: /etc/config)
 # - RATE_LIMIT: requests per second (default: 100)
+# - AUTO_UPDATE_KUSTOMIZATIONS: trigger updates on config changes (default: true)
+# - AUTO_UPDATE_EXCLUDE_NAMESPACES: comma-separated list of namespaces to exclude (default: flux-system)
 ```
 
 ### Kubernetes Deployment
@@ -125,10 +127,20 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 - `ConfigWatcher`: Monitors config directory for file changes using fsnotify
 - Automatically reloads configuration when ConfigMaps or Secrets are updated by Kubernetes
 - Supports any combination of ConfigMaps and Secrets mounted to the config directory
+- Recursively watches all subdirectories (required for Kubernetes ConfigMap/Secret mounts)
 - Reacts to Write, Create, Remove, and Rename events (handles Kubernetes atomic updates via symlink swapping)
 - Uses 100ms debounce to handle rapid successive changes
 - Preserves old config on reload failure (logs errors but doesn't crash webhook)
 - Thread-safe reload leveraging existing `AppConfig.Mu` RWMutex
+- Optionally triggers Kustomization updates after successful reload (when auto-update is enabled)
+
+**Kustomization Updater** (`kustomize-mutating-webhook/pkg/utils/kustomization_updater.go`)
+- `KustomizationUpdater`: Optional component for triggering updates on existing Kustomizations
+- Lists all Kustomizations across all namespaces (except excluded ones)
+- Annotates each Kustomization with timestamp to trigger UPDATE events
+- Causes webhook to re-inject latest config values into existing Kustomizations
+- Only active when `AUTO_UPDATE_KUSTOMIZATIONS=true`
+- Respects namespace exclusions (default: flux-system)
 
 **Metrics** (`kustomize-mutating-webhook/internal/metrics/`)
 - Prometheus metrics for monitoring webhook performance
@@ -167,6 +179,130 @@ kubectl logs --selector=app=kustomize-mutating-webhook -n flux-system
 ### FluxCD Integration
 
 The webhook intercepts FluxCD Kustomization resources before they're stored in etcd. When FluxCD's kustomize-controller reconciles a Kustomization, it uses the `spec.postBuild.substitute` values that were injected by this webhook to perform variable substitution in the rendered manifests.
+
+### Server-Side Apply (SSA) Requirement
+
+**IMPORTANT**: This webhook requires FluxCD v2+ which uses **Server-Side Apply (SSA)** by default. SSA is critical for the webhook to work correctly with FluxCD's GitOps workflow.
+
+#### How SSA Enables Webhook + FluxCD Coexistence
+
+With Server-Side Apply:
+1. **FluxCD manages only fields defined in Git**
+   - If your Git repository doesn't define `spec.postBuild.substitute`, FluxCD won't manage that field
+   - FluxCD only updates the fields it declares ownership of
+
+2. **Webhook adds substitute values**
+   - When FluxCD reconciles a Kustomization from Git, it sends an UPDATE request to the API server
+   - The webhook intercepts this UPDATE and injects all ConfigMap/Secret values into `spec.postBuild.substitute`
+   - These webhook-injected values persist across FluxCD reconciliations
+
+3. **Both coexist without conflict**
+   - FluxCD owns the Kustomization structure (path, interval, sourceRef, etc.)
+   - Webhook owns the substitute values
+   - Neither overwrites the other's fields
+
+#### Recommended Git Configuration
+
+**Option 1: Don't define substitute in Git** (Recommended)
+```yaml
+# In Git: clusters/production/apps/myapp.yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: myapp
+spec:
+  interval: 10m
+  path: ./apps/myapp
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  # No postBuild section - webhook handles everything
+```
+
+**Option 2: Define some values in Git, webhook adds more**
+```yaml
+# In Git
+spec:
+  postBuild:
+    substitute:
+      APP_ENV: production  # Git-managed value
+      # Webhook will add: CLUSTER_ID, CLUSTER_DOMAIN, secrets, etc.
+```
+
+#### Verification
+
+To verify SSA is working correctly:
+```bash
+# 1. Create or update a Kustomization
+flux reconcile kustomization myapp --with-source
+
+# 2. Check that webhook-injected values persist
+kubectl get kustomization -n myapp-ns myapp -o jsonpath='{.spec.postBuild.substitute}' | jq
+```
+
+If values disappear after reconciliation, verify you're using FluxCD v2+ with SSA enabled.
+
+### Auto-Update on Config Changes (Optional)
+
+The webhook can optionally trigger updates on all existing Kustomizations when ConfigMaps or Secrets change, ensuring immediate propagation of new config values without waiting for FluxCD's natural reconciliation cycle.
+
+#### Configuration
+
+```bash
+# Auto-update is enabled by default (default: true)
+# To disable:
+AUTO_UPDATE_KUSTOMIZATIONS=false
+
+# Exclude namespaces from auto-update (default: flux-system)
+# Comma-separated list
+AUTO_UPDATE_EXCLUDE_NAMESPACES=flux-system,kube-system
+```
+
+#### How It Works
+
+When enabled:
+1. ConfigMap or Secret changes are detected by the ConfigWatcher
+2. Configuration is reloaded successfully
+3. All Kustomizations (except excluded namespaces) are annotated with `webhook.kustomize-mutating-webhook/config-reload=<timestamp>`
+4. Annotation triggers UPDATE events on each Kustomization
+5. Webhook intercepts each UPDATE and injects the latest config values
+6. Kustomizations now have the updated values
+
+#### Behavior
+
+- **With auto-update** (default): New config values are immediately propagated to all existing Kustomizations
+- **Without auto-update**: New config values are injected when Kustomizations are naturally created/updated by FluxCD
+
+#### Example
+
+```bash
+# Update a ConfigMap
+kubectl patch configmap cluster-config -n flux-system \
+  --type merge -p '{"data":{"NEW_KEY":"new-value"}}'
+
+# With auto-update enabled:
+# - ConfigWatcher detects change within ~1 second
+# - All Kustomizations (except flux-system) are annotated
+# - Webhook injects NEW_KEY into all Kustomizations
+# - Changes visible immediately
+
+# Without auto-update:
+# - ConfigWatcher still reloads config within ~1 second
+# - Webhook has the new value in memory
+# - Kustomizations get NEW_KEY when FluxCD next reconciles them (default: 10 minutes)
+```
+
+#### When to Use Auto-Update
+
+**Use auto-update when:**
+- You need immediate propagation of config changes (e.g., rotating credentials)
+- You have many Kustomizations and don't want to wait for reconciliation
+- You want consistent config across all resources immediately
+
+**Don't use auto-update when:**
+- You prefer GitOps-only changes (wait for FluxCD reconciliation)
+- You have very large clusters (many Kustomizations) where batch updates might cause API server load
+- You want to control rollout of config changes manually
 
 ## Release Process
 
