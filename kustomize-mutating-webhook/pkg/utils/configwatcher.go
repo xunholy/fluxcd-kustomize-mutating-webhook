@@ -3,6 +3,8 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -87,9 +89,27 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+// addSubdirsToWatcher recursively adds all subdirectories to the fsnotify watcher
+func (cw *ConfigWatcher) addSubdirsToWatcher() error {
+	return filepath.WalkDir(cw.configDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			log.Debug().Str("path", path).Msg("Adding directory to watcher")
+			if err := cw.watcher.Add(path); err != nil {
+				return fmt.Errorf("failed to add directory %s to watcher: %w", path, err)
+			}
+		}
+		return nil
+	})
+}
+
 func (cw *ConfigWatcher) Watch() error {
-	if err := cw.watcher.Add(cw.configDir); err != nil {
-		return fmt.Errorf("failed to add directory to watcher: %w", err)
+	// Recursively add all subdirectories to the watcher
+	// This is necessary because Kubernetes mounts ConfigMaps/Secrets as subdirectories
+	if err := cw.addSubdirsToWatcher(); err != nil {
+		return fmt.Errorf("failed to add directories to watcher: %w", err)
 	}
 
 	for {
