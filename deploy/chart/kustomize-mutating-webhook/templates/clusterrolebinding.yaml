@@ -1,0 +1,17 @@
+{{- if and .Values.serviceAccount.create .Values.rbac.create -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}
+  labels:
+    {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kustomize-mutating-webhook.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

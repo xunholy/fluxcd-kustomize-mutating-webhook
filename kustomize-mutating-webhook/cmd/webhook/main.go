@@ -33,12 +33,19 @@ func main() {
 	if cfg.AutoUpdateKustomizations {
 		kustomizationUpdater, err = utils.NewKustomizationUpdater(cfg.AutoUpdateExcludeNamespaces)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create Kustomization updater")
+			log.Warn().
+				Err(err).
+				Msg("Failed to create Kustomization updater - auto-update will be disabled. " +
+					"This is expected if running outside Kubernetes or without proper RBAC permissions.")
+			log.Info().
+				Bool("auto_update", false).
+				Msg("Kustomization auto-update disabled (failed to initialize)")
+		} else {
+			log.Info().
+				Bool("auto_update", true).
+				Strs("exclude_namespaces", cfg.AutoUpdateExcludeNamespaces).
+				Msg("Kustomization auto-update enabled")
 		}
-		log.Info().
-			Bool("auto_update", true).
-			Strs("exclude_namespaces", cfg.AutoUpdateExcludeNamespaces).
-			Msg("Kustomization auto-update enabled")
 	} else {
 		log.Info().Bool("auto_update", false).Msg("Kustomization auto-update disabled")
 	}

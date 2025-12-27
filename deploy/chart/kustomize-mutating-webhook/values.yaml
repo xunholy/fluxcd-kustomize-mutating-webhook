@@ -22,8 +22,15 @@ fullnameOverride: ""
 serviceAccount:
   # -- Specifies whether a service account should be created
   create: true
+  # -- Automatically mount service account token (required for auto-update feature)
+  automountServiceAccountToken: true
   # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
+
+rbac:
+  # -- Create RBAC resources (ClusterRole and ClusterRoleBinding)
+  # Required for auto-update feature to list and update Kustomizations
+  create: true
 
 podSecurityContext:
   # -- Run container as non-root user
@@ -124,6 +131,10 @@ env:
   LOG_LEVEL: info
   # -- Rate limit for webhook requests per second
   RATE_LIMIT: "100"
+  # -- Enable automatic triggering of Kustomization updates when ConfigMaps/Secrets change
+  AUTO_UPDATE_KUSTOMIZATIONS: "true"
+  # -- Comma-separated list of namespaces to exclude from auto-update (default: flux-system)
+  AUTO_UPDATE_EXCLUDE_NAMESPACES: "flux-system"
 
 podDisruptionBudget:
   # -- Enable pod disruption budget (recommended for replicas >= 3)

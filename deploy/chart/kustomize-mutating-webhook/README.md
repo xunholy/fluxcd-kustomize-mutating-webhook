@@ -49,6 +49,8 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | certManager.certificateRenewBefore | string | `"360h"` | Certificate renewal threshold (15 days before expiry) |
 | certManager.enabled | bool | `true` | Enable cert-manager integration for TLS certificate management |
 | configMaps | list | `[{"create":false,"data":{},"name":"cluster-config","optional":false}]` | ConfigMaps to mount into the webhook container for substitution variables |
+| env.AUTO_UPDATE_EXCLUDE_NAMESPACES | string | `"flux-system"` | Comma-separated list of namespaces to exclude from auto-update (default: flux-system) |
+| env.AUTO_UPDATE_KUSTOMIZATIONS | string | `"true"` | Enable automatic triggering of Kustomization updates when ConfigMaps/Secrets change |
 | env.LOG_LEVEL | string | `"info"` | Log level (debug, info, warn, error, fatal, panic) |
 | env.RATE_LIMIT | string | `"100"` | Rate limit for webhook requests per second |
 | fullnameOverride | string | `""` | Override the full name of the release |
@@ -64,6 +66,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | podSecurityContext.runAsGroup | int | `1000` | Group ID to run the container as |
 | podSecurityContext.runAsNonRoot | bool | `true` | Run container as non-root user |
 | podSecurityContext.runAsUser | int | `1000` | User ID to run the container as |
+| rbac.create | bool | `true` | Create RBAC resources (ClusterRole and ClusterRoleBinding) Required for auto-update feature to list and update Kustomizations |
 | replicas | int | `1` | Number of webhook pod replicas |
 | resources.limits.cpu | string | `"500m"` | CPU resource limits |
 | resources.limits.memory | string | `"256Mi"` | Memory resource limits |
@@ -76,6 +79,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | service.headless | bool | `true` | Create a headless service (no cluster IP) |
 | service.port | int | `8443` | Service port for webhook server |
 | service.type | string | `"ClusterIP"` | Kubernetes service type |
+| serviceAccount.automountServiceAccountToken | bool | `true` | Automatically mount service account token (required for auto-update feature) |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template |
 | tolerations | list | `[]` | Tolerations for pod assignment |
