@@ -108,15 +108,23 @@ func createPatch(obj *unstructured.Unstructured) []map[string]interface{} {
 		})
 	}
 
-	for key := range utils.AppConfig.Config {
-		if configValue, ok := utils.GetAppConfig(key); ok {
-			escapedKey := utils.EscapeJsonPointer(key)
-			patch = append(patch, map[string]interface{}{
-				"op":    "add",
-				"path":  "/spec/postBuild/substitute/" + escapedKey,
-				"value": configValue,
-			})
-		}
+	// Acquire read lock before iterating to ensure we see a consistent snapshot of the config
+	// This prevents a race condition where the config might be reloaded mid-iteration
+	utils.AppConfig.Mu.RLock()
+	configSnapshot := make(map[string]string, len(utils.AppConfig.Config))
+	for key, value := range utils.AppConfig.Config {
+		configSnapshot[key] = value
+	}
+	utils.AppConfig.Mu.RUnlock()
+
+	// Iterate over the snapshot, not the live config map
+	for key, value := range configSnapshot {
+		escapedKey := utils.EscapeJsonPointer(key)
+		patch = append(patch, map[string]interface{}{
+			"op":    "add",
+			"path":  "/spec/postBuild/substitute/" + escapedKey,
+			"value": value,
+		})
 	}
 
 	return patch

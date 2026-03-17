@@ -20,8 +20,39 @@ func main() {
 	}
 	config.InitLogger(cfg.LogLevel)
 
+	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Reading configuration directory")
 	if err := utils.ReadConfigDirectory(cfg.ConfigDir); err != nil {
-		log.Warn().Err(err).Msg("Error while reading config directory")
+		log.Warn().Err(err).Str("config_dir", cfg.ConfigDir).Msg("Error while reading config directory")
+	} else {
+		log.Info().Msg("Initial configuration loaded")
+	}
+
+	// Create Kustomization updater if auto-update is enabled
+	var kustomizationUpdater *utils.KustomizationUpdater
+	var err error
+	if cfg.AutoUpdateKustomizations {
+		kustomizationUpdater, err = utils.NewKustomizationUpdater(cfg.AutoUpdateExcludeNamespaces)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Msg("Failed to create Kustomization updater - auto-update will be disabled. " +
+					"This is expected if running outside Kubernetes or without proper RBAC permissions.")
+			log.Info().
+				Bool("auto_update", false).
+				Msg("Kustomization auto-update disabled (failed to initialize)")
+		} else {
+			log.Info().
+				Bool("auto_update", true).
+				Strs("exclude_namespaces", cfg.AutoUpdateExcludeNamespaces).
+				Msg("Kustomization auto-update enabled")
+		}
+	} else {
+		log.Info().Bool("auto_update", false).Msg("Kustomization auto-update disabled")
+	}
+
+	configWatcher, err := utils.NewConfigWatcher(cfg.ConfigDir, cfg.AutoUpdateKustomizations, kustomizationUpdater)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create config watcher")
 	}
 
 	server, err := webhook.NewServer(cfg)
@@ -36,6 +67,14 @@ func main() {
 		}
 	}()
 
+	// Start config watcher in a goroutine
+	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Starting config watcher for hot-reload")
+	go func() {
+		if err := configWatcher.Watch(); err != nil {
+			log.Error().Err(err).Msg("Config watcher exited with error")
+		}
+	}()
+
 	go func() {
 		log.Info().Msgf("Starting the webhook server on %s", cfg.ServerAddress)
 		if err := server.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
@@ -43,16 +82,17 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(server)
+	waitForShutdown(server, configWatcher)
 }
 
-func waitForShutdown(server *webhook.Server) {
+func waitForShutdown(server *webhook.Server, configWatcher *utils.ConfigWatcher) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Info().Msg("Shutting down server...")
-	
+
 	server.CertWatcher.Stop()
+	configWatcher.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), server.ShutdownTimeout)
 	defer cancel()

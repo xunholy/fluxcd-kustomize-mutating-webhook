@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 )
 
 var AppConfig struct {
@@ -56,6 +58,16 @@ func ReadConfigDirectory(directory string) error {
 	AppConfig.Mu.Lock()
 	AppConfig.Config = config
 	AppConfig.Mu.Unlock()
+
+	// Log successful config load with key names
+	keys := make([]string, 0, len(config))
+	for key := range config {
+		keys = append(keys, key)
+	}
+	log.Info().
+		Int("count", len(config)).
+		Strs("keys", keys).
+		Msg("Configuration loaded successfully")
 
 	return nil
 }

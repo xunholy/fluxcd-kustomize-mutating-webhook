@@ -4,37 +4,44 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 type Config struct {
-	ServerAddress string
-	CertFile      string
-	KeyFile       string
-	ConfigDir     string
-	LogLevel      string
-	RateLimit     int
+	ServerAddress                string
+	CertFile                     string
+	KeyFile                      string
+	ConfigDir                    string
+	LogLevel                     string
+	RateLimit                    int
+	AutoUpdateKustomizations     bool
+	AutoUpdateExcludeNamespaces  []string
 }
 
 const (
-	defaultServerAddress = ":8443"
-	defaultCertFile      = "/etc/webhook/certs/tls.crt"
-	defaultKeyFile       = "/etc/webhook/certs/tls.key"
-	defaultConfigDir     = "/etc/config"
-	defaultLogLevel      = "info"
-	defaultRateLimit     = 100
+	defaultServerAddress               = ":8443"
+	defaultCertFile                    = "/etc/webhook/certs/tls.crt"
+	defaultKeyFile                     = "/etc/webhook/certs/tls.key"
+	defaultConfigDir                   = "/etc/config"
+	defaultLogLevel                    = "info"
+	defaultRateLimit                   = 100
+	defaultAutoUpdateKustomizations    = true
+	defaultAutoUpdateExcludeNamespaces = "flux-system"
 )
 
 func LoadConfig() Config {
 	return Config{
-		ServerAddress: getEnv("SERVER_ADDRESS", defaultServerAddress),
-		CertFile:      getEnv("CERT_FILE", defaultCertFile),
-		KeyFile:       getEnv("KEY_FILE", defaultKeyFile),
-		ConfigDir:     getEnv("CONFIG_DIR", defaultConfigDir),
-		LogLevel:      getEnv("LOG_LEVEL", defaultLogLevel),
-		RateLimit:     getEnvAsInt("RATE_LIMIT", defaultRateLimit),
+		ServerAddress:               getEnv("SERVER_ADDRESS", defaultServerAddress),
+		CertFile:                    getEnv("CERT_FILE", defaultCertFile),
+		KeyFile:                     getEnv("KEY_FILE", defaultKeyFile),
+		ConfigDir:                   getEnv("CONFIG_DIR", defaultConfigDir),
+		LogLevel:                    getEnv("LOG_LEVEL", defaultLogLevel),
+		RateLimit:                   getEnvAsInt("RATE_LIMIT", defaultRateLimit),
+		AutoUpdateKustomizations:    getEnvAsBool("AUTO_UPDATE_KUSTOMIZATIONS", defaultAutoUpdateKustomizations),
+		AutoUpdateExcludeNamespaces: getEnvAsSlice("AUTO_UPDATE_EXCLUDE_NAMESPACES", defaultAutoUpdateExcludeNamespaces),
 	}
 }
 
@@ -84,4 +91,28 @@ func getEnvAsInt(key string, fallback int) int {
 		return value
 	}
 	return fallback
+}
+
+func getEnvAsBool(key string, fallback bool) bool {
+	strValue := getEnv(key, "")
+	if value, err := strconv.ParseBool(strValue); err == nil {
+		return value
+	}
+	return fallback
+}
+
+func getEnvAsSlice(key string, fallback string) []string {
+	strValue := getEnv(key, fallback)
+	if strValue == "" {
+		return []string{}
+	}
+	parts := strings.Split(strValue, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
