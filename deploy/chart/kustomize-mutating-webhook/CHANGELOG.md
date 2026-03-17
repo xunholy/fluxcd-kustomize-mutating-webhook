@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.8.0...kustomize-mutating-webhook-chart-v0.9.0) (2026-03-17)
+
+
+### Features
+
+* Update image tag in values.yaml ([c31bb2a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/c31bb2a8eb96b8256f0942cf50f30c36b8a85bc3))
+
 ## [0.8.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.7.0...kustomize-mutating-webhook-chart-v0.8.0) (2026-03-17)
 
 
