@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.23 AS builder
+FROM golang:1.26.1 AS builder
 
 # Build arguments for cross-compilation
 ARG TARGETOS
