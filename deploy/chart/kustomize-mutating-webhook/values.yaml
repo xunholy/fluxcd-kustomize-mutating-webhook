@@ -9,7 +9,7 @@ image:
   # -- Image pull policy
   pullPolicy: Always
   # -- Image tag (overrides the image tag whose default is the chart appVersion)
-  tag: "main-fee1c33"
+  tag: "main-2b83233"
 
 # -- Secrets for pulling images from private registries
 imagePullSecrets: []
