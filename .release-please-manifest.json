@@ -1,6 +1,6 @@
 {
-  "kustomize-mutating-webhook": "0.9.0",
+  "kustomize-mutating-webhook": "0.10.0",
   "kustomize-mutating-webhook+FILLER": "0.0.0",
-  "deploy/chart/kustomize-mutating-webhook": "0.9.0",
+  "deploy/chart/kustomize-mutating-webhook": "0.10.0",
   "deploy/chart/kustomize-mutating-webhook+FILLER": "0.0.0"
 }
