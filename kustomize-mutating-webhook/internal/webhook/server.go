@@ -33,8 +33,11 @@ func NewServer(cfg config.Config) (*Server, error) {
 	r := setupRouter(cfg.RateLimit)
 
 	server := &http.Server{
-		Addr:    cfg.ServerAddress,
-		Handler: r,
+		Addr:         cfg.ServerAddress,
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 		TLSConfig: &tls.Config{
 			GetCertificate: certWatcher.GetCertificate,
 		},
@@ -53,10 +56,14 @@ func setupRouter(rateLimit int) *chi.Mux {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(rateLimitMiddleware(rate.Limit(rateLimit), rateLimit))
 	r.Use(conditionalLoggerMiddleware())
 
-	r.Post("/mutate", handlers.HandleMutate)
+	// Rate limiting applies only to /mutate to avoid throttling kubelet health checks.
+	r.Group(func(r chi.Router) {
+		r.Use(rateLimitMiddleware(rate.Limit(rateLimit), rateLimit))
+		r.Post("/mutate", handlers.HandleMutate)
+	})
+
 	r.Get("/health", handleHealth)
 	r.Get("/ready", handleReady)
 	r.Handle("/metrics", promhttp.Handler())
@@ -88,17 +95,25 @@ func handleReady(w http.ResponseWriter, r *http.Request) {
 	configLoaded := len(utils.AppConfig.Config) > 0
 	utils.AppConfig.Mu.RUnlock()
 
+	status := "Ready"
+	statusCode := http.StatusOK
+	if !configLoaded {
+		status = "NotReady"
+		statusCode = http.StatusServiceUnavailable
+	}
+
 	ready := struct {
 		Status       string `json:"status"`
 		ConfigLoaded bool   `json:"configLoaded"`
 		Timestamp    string `json:"timestamp"`
 	}{
-		Status:       "Ready",
+		Status:       status,
 		ConfigLoaded: configLoaded,
 		Timestamp:    time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
 	json.NewEncoder(w).Encode(ready)
 }
 

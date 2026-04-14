@@ -1,18 +1,19 @@
 {{- if and .Values.serviceAccount.create .Values.rbac.create -}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
-  name: {{ include "kustomize-mutating-webhook.fullname" . }}
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}-config-reader
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
 rules:
-  - apiGroups:
-      - kustomize.toolkit.fluxcd.io
+  - apiGroups: [""]
     resources:
-      - kustomizations
+      - configmaps
+      - secrets
     verbs:
       - get
       - list
-      - patch
+      - watch
 {{- end }}

@@ -10,6 +10,16 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func DetectNamespace(configured string) string {
+	if configured != "" {
+		return configured
+	}
+	if ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		return strings.TrimSpace(string(ns))
+	}
+	return "flux-system"
+}
+
 type Config struct {
 	ServerAddress                string
 	CertFile                     string
@@ -19,6 +29,9 @@ type Config struct {
 	RateLimit                    int
 	AutoUpdateKustomizations     bool
 	AutoUpdateExcludeNamespaces  []string
+	WatchConfigMaps              []string
+	WatchSecrets                 []string
+	WatchNamespace               string
 }
 
 const (
@@ -30,6 +43,9 @@ const (
 	defaultRateLimit                   = 100
 	defaultAutoUpdateKustomizations    = true
 	defaultAutoUpdateExcludeNamespaces = "flux-system"
+	defaultWatchConfigMaps             = "cluster-config"
+	defaultWatchSecrets                = ""
+	defaultWatchNamespace              = ""
 )
 
 func LoadConfig() Config {
@@ -42,6 +58,9 @@ func LoadConfig() Config {
 		RateLimit:                   getEnvAsInt("RATE_LIMIT", defaultRateLimit),
 		AutoUpdateKustomizations:    getEnvAsBool("AUTO_UPDATE_KUSTOMIZATIONS", defaultAutoUpdateKustomizations),
 		AutoUpdateExcludeNamespaces: getEnvAsSlice("AUTO_UPDATE_EXCLUDE_NAMESPACES", defaultAutoUpdateExcludeNamespaces),
+		WatchConfigMaps:             getEnvAsSlice("WATCH_CONFIGMAPS", defaultWatchConfigMaps),
+		WatchSecrets:                getEnvAsSlice("WATCH_SECRETS", defaultWatchSecrets),
+		WatchNamespace:              getEnv("WATCH_NAMESPACE", defaultWatchNamespace),
 	}
 }
 
@@ -66,8 +85,13 @@ func ValidateConfig(cfg Config) error {
 
 func InitLogger(logLevel string) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	consoleWriter := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: zerolog.TimeFieldFormat, NoColor: false}
-	log.Logger = log.Output(consoleWriter)
+
+	if getEnv("LOG_FORMAT", "json") == "console" {
+		consoleWriter := zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: zerolog.TimeFieldFormat, NoColor: false}
+		log.Logger = log.Output(consoleWriter)
+	} else {
+		log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
+	}
 
 	level, err := zerolog.ParseLevel(logLevel)
 	if err != nil {

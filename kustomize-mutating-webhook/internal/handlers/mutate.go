@@ -13,7 +13,25 @@ import (
 	v1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 )
+
+// deniedAdmissionReview builds a denied AdmissionReview response with a status message.
+func deniedAdmissionReview(uid types.UID, message string) v1.AdmissionReview {
+	return v1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admission.k8s.io/v1",
+			Kind:       "AdmissionReview",
+		},
+		Response: &v1.AdmissionResponse{
+			UID:     uid,
+			Allowed: false,
+			Result: &metav1.Status{
+				Message: message,
+			},
+		},
+	}
+}
 
 func HandleMutate(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
@@ -22,7 +40,15 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 	if err := jsoniter.NewDecoder(r.Body).Decode(&admissionReviewReq); err != nil {
 		log.Error().Err(err).Msg("Failed to decode AdmissionReview request")
 		metrics.ErrorCount.With(prometheus.Labels{"error_type": "decode_error"}).Inc()
-		http.Error(w, "Could not decode request", http.StatusBadRequest)
+		respondWithAdmissionReview(w, deniedAdmissionReview("", "Could not decode request"))
+		return
+	}
+
+	// Finding 2: guard against nil Request to prevent panic on malformed AdmissionReview.
+	if admissionReviewReq.Request == nil {
+		log.Error().Msg("AdmissionReview request field is nil")
+		metrics.ErrorCount.With(prometheus.Labels{"error_type": "nil_request"}).Inc()
+		respondWithAdmissionReview(w, deniedAdmissionReview("", "Request is nil"))
 		return
 	}
 
@@ -48,32 +74,48 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var obj unstructured.Unstructured
-	if err := json.Unmarshal(admissionReviewReq.Request.Object.Raw, &obj); err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal Object")
-		metrics.ErrorCount.With(prometheus.Labels{"error_type": "unmarshal_error"}).Inc()
-		http.Error(w, "Failed to unmarshal Object", http.StatusBadRequest)
-		return
-	}
-
-	if admissionReviewReq.Request.Operation == v1.Delete || !obj.GetDeletionTimestamp().IsZero() {
+	// Finding 5: check DELETE before attempting Object unmarshal — DELETE requests have nil Object.Raw.
+	if admissionReviewReq.Request.Operation == v1.Delete {
 		respondWithAdmissionReview(w, admissionResponse)
 		metrics.RequestDuration.With(prometheus.Labels{"resource_kind": resourceKind, "operation": operation}).Observe(time.Since(startTime).Seconds())
 		return
 	}
 
+	var obj unstructured.Unstructured
+	if err := json.Unmarshal(admissionReviewReq.Request.Object.Raw, &obj); err != nil {
+		log.Error().Err(err).Msg("Failed to unmarshal Object")
+		metrics.ErrorCount.With(prometheus.Labels{"error_type": "unmarshal_error"}).Inc()
+		// Finding 4: return AdmissionReview JSON, not plain text.
+		respondWithAdmissionReview(w, deniedAdmissionReview(admissionReviewReq.Request.UID, "Failed to unmarshal Object"))
+		return
+	}
+
+	if !obj.GetDeletionTimestamp().IsZero() {
+		respondWithAdmissionReview(w, admissionResponse)
+		metrics.RequestDuration.With(prometheus.Labels{"resource_kind": resourceKind, "operation": operation}).Observe(time.Since(startTime).Seconds())
+		return
+	}
+
+	// Finding 6: use lowercase snake_case log field names.
 	log.Info().
-		Str("UID", string(admissionReviewReq.Request.UID)).
-		Str("Kind", resourceKind).
-		Str("Resource", admissionReviewReq.Request.Resource.Resource).
-		Str("Name", admissionReviewReq.Request.Name).
-		Str("Namespace", admissionReviewReq.Request.Namespace).
+		Str("uid", string(admissionReviewReq.Request.UID)).
+		Str("kind", resourceKind).
+		Str("resource", admissionReviewReq.Request.Resource.Resource).
+		Str("name", admissionReviewReq.Request.Name).
+		Str("namespace", admissionReviewReq.Request.Namespace).
 		Msg("Request details")
 
 	patch := createPatch(&obj)
 
 	if len(patch) > 0 {
-		patchBytes, _ := json.Marshal(patch)
+		// Finding 1: handle json.Marshal error instead of silently discarding it.
+		patchBytes, err := json.Marshal(patch)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to marshal patch")
+			metrics.ErrorCount.With(prometheus.Labels{"error_type": "marshal_error"}).Inc()
+			respondWithAdmissionReview(w, deniedAdmissionReview(admissionReviewReq.Request.UID, "Failed to marshal patch"))
+			return
+		}
 		admissionResponse.Response.Patch = patchBytes
 		pt := v1.PatchTypeJSONPatch
 		admissionResponse.Response.PatchType = &pt
@@ -130,10 +172,16 @@ func createPatch(obj *unstructured.Unstructured) []map[string]interface{} {
 	return patch
 }
 
+// Finding 3: buffer the JSON response before writing to avoid calling http.Error
+// after WriteHeader(200) has already been sent implicitly by the encoder.
 func respondWithAdmissionReview(w http.ResponseWriter, admissionResponse v1.AdmissionReview) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(admissionResponse); err != nil {
+	respBytes, err := json.Marshal(admissionResponse)
+	if err != nil {
 		log.Error().Err(err).Msg("Failed to encode AdmissionReview response")
-		http.Error(w, "Could not encode response", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write(respBytes); err != nil {
+		log.Error().Err(err).Msg("Failed to write AdmissionReview response")
 	}
 }

@@ -138,6 +138,131 @@ func TestHandleMutate(t *testing.T) {
 	}
 }
 
+// TestHandleMutate_NilRequest verifies that a decoded AdmissionReview with a nil
+// Request field returns a denied AdmissionReview JSON response instead of panicking.
+func TestHandleMutate_NilRequest(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admission.k8s.io/v1",
+			Kind:       "AdmissionReview",
+		},
+		// Request intentionally omitted (nil)
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+	require.NotNil(t, respAR.Response.Result)
+	assert.Equal(t, "Request is nil", respAR.Response.Result.Message)
+}
+
+// TestHandleMutate_DeleteOperation verifies that DELETE requests are allowed
+// without attempting to unmarshal the (absent) Object body.
+func TestHandleMutate_DeleteOperation(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			// No Object field — DELETE requests have nil Object.Raw
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.True(t, respAR.Response.Allowed)
+	assert.Nil(t, respAR.Response.Patch)
+}
+
+// TestHandleMutate_DecodeError verifies that an invalid request body returns a
+// denied AdmissionReview JSON response (not plain text).
+func TestHandleMutate_DecodeError(t *testing.T) {
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBufferString("not valid json"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+}
+
+// TestHandleMutate_UnmarshalError verifies that a Kustomization whose Object body
+// is invalid JSON returns a denied AdmissionReview JSON response.
+func TestHandleMutate_UnmarshalError(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			// A JSON array is valid JSON but unstructured.Unstructured requires an object.
+			Object: runtime.RawExtension{Raw: []byte(`["not","an","object"]`)},
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+	require.NotNil(t, respAR.Response.Result)
+	assert.Equal(t, "Failed to unmarshal Object", respAR.Response.Result.Message)
+}
+
 func TestCreatePatch(t *testing.T) {
 	// Set up test config with proper mutex locking
 	utils.AppConfig.Mu.Lock()

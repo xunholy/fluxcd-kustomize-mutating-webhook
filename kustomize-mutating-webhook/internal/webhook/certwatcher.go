@@ -19,6 +19,7 @@ type CertWatcher struct {
 	mu       sync.RWMutex
 	watcher  *fsnotify.Watcher
 	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func NewCertWatcher(certFile, keyFile string) (*CertWatcher, error) {
@@ -61,20 +62,25 @@ func (cw *CertWatcher) Watch() error {
 		return fmt.Errorf("failed to add directory to watcher: %w", err)
 	}
 
+	var debounceTimer *time.Timer
 	for {
 		select {
 		case event, ok := <-cw.watcher.Events:
 			if !ok {
 				return errors.New("watcher channel closed")
 			}
-			if event.Op&fsnotify.Remove == fsnotify.Remove {
-				log.Info().Msg("Certificate files modified. Reloading...")
-				time.Sleep(100 * time.Millisecond)
-				if err := cw.loadCertificate(); err != nil {
-					log.Error().Err(err).Msg("Failed to reload certificate")
-				} else {
-					log.Info().Msg("Certificate reloaded successfully")
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
+				log.Info().Str("event", event.String()).Msg("Certificate files modified. Reloading...")
+				if debounceTimer != nil {
+					debounceTimer.Stop()
 				}
+				debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+					if err := cw.loadCertificate(); err != nil {
+						log.Error().Err(err).Msg("Failed to reload certificate")
+					} else {
+						log.Info().Msg("Certificate reloaded successfully")
+					}
+				})
 			}
 		case err, ok := <-cw.watcher.Errors:
 			if !ok {
@@ -88,6 +94,8 @@ func (cw *CertWatcher) Watch() error {
 }
 
 func (cw *CertWatcher) Stop() {
-	close(cw.done)
-	cw.watcher.Close()
+	cw.stopOnce.Do(func() {
+		close(cw.done)
+		cw.watcher.Close()
+	})
 }

@@ -1,43 +1,10 @@
 package utils
 
 import (
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestReadConfigMap(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir, err := ioutil.TempDir("", "config-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	// Create test config files
-	err = ioutil.WriteFile(filepath.Join(tempDir, "key1"), []byte("value1"), 0644)
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempDir, "key2"), []byte("value2"), 0644)
-	require.NoError(t, err)
-
-	// Test reading config
-	err = ReadConfigDirectory(tempDir)
-	require.NoError(t, err)
-
-	assert.Equal(t, "value1", AppConfig.Config["key1"])
-	assert.Equal(t, "value2", AppConfig.Config["key2"])
-
-	// Test reading from empty directory
-	emptyDir, err := ioutil.TempDir("", "empty-config-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(emptyDir)
-
-	err = ReadConfigDirectory(emptyDir)
-	assert.Error(t, err)
-	assert.Equal(t, "no configuration found", err.Error())
-}
 
 func TestGetAppConfig(t *testing.T) {
 	AppConfig.Config = map[string]string{

@@ -11,6 +11,8 @@ import (
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/config"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/webhook"
 	"github.com/xunholy/fluxcd-mutating-webhook/pkg/utils"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func main() {
@@ -20,17 +22,13 @@ func main() {
 	}
 	config.InitLogger(cfg.LogLevel)
 
-	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Reading configuration directory")
-	if err := utils.ReadConfigDirectory(cfg.ConfigDir); err != nil {
-		log.Warn().Err(err).Str("config_dir", cfg.ConfigDir).Msg("Error while reading config directory")
-	} else {
-		log.Info().Msg("Initial configuration loaded")
-	}
+	namespace := config.DetectNamespace(cfg.WatchNamespace)
+	log.Info().Str("namespace", namespace).Msg("Detected watch namespace")
 
 	// Create Kustomization updater if auto-update is enabled
 	var kustomizationUpdater *utils.KustomizationUpdater
-	var err error
 	if cfg.AutoUpdateKustomizations {
+		var err error
 		kustomizationUpdater, err = utils.NewKustomizationUpdater(cfg.AutoUpdateExcludeNamespaces)
 		if err != nil {
 			log.Warn().
@@ -50,28 +48,45 @@ func main() {
 		log.Info().Bool("auto_update", false).Msg("Kustomization auto-update disabled")
 	}
 
-	configWatcher, err := utils.NewConfigWatcher(cfg.ConfigDir, cfg.AutoUpdateKustomizations, kustomizationUpdater)
+	// Create Kubernetes clientset for config watching
+	restConfig, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create config watcher")
+		log.Fatal().Err(err).Msg("Failed to get in-cluster config for config informer")
 	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create Kubernetes clientset")
+	}
+
+	autoUpdate := kustomizationUpdater != nil && cfg.AutoUpdateKustomizations
+	configInformer := utils.NewConfigInformer(
+		clientset,
+		namespace,
+		cfg.WatchConfigMaps,
+		cfg.WatchSecrets,
+		autoUpdate,
+		kustomizationUpdater,
+	)
 
 	server, err := webhook.NewServer(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
 
-	// Start certificate watcher in a goroutine
 	go func() {
 		if err := server.CertWatcher.Watch(); err != nil {
 			log.Fatal().Err(err).Msg("Certificate watcher exited with error")
 		}
 	}()
 
-	// Start config watcher in a goroutine
-	log.Info().Str("config_dir", cfg.ConfigDir).Msg("Starting config watcher for hot-reload")
+	log.Info().
+		Strs("configmaps", cfg.WatchConfigMaps).
+		Strs("secrets", cfg.WatchSecrets).
+		Str("namespace", namespace).
+		Msg("Starting config informer")
 	go func() {
-		if err := configWatcher.Watch(); err != nil {
-			log.Error().Err(err).Msg("Config watcher exited with error")
+		if err := configInformer.Start(); err != nil {
+			log.Error().Err(err).Msg("Config informer exited with error")
 		}
 	}()
 
@@ -82,17 +97,17 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(server, configWatcher)
+	waitForShutdown(server, configInformer)
 }
 
-func waitForShutdown(server *webhook.Server, configWatcher *utils.ConfigWatcher) {
+func waitForShutdown(server *webhook.Server, configInformer *utils.ConfigInformer) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Info().Msg("Shutting down server...")
 
 	server.CertWatcher.Stop()
-	configWatcher.Stop()
+	configInformer.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), server.ShutdownTimeout)
 	defer cancel()
