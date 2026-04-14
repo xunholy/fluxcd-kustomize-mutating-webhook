@@ -24,7 +24,7 @@ type KustomizationUpdater struct {
 	excludeNamespaces []string
 }
 
-// NewKustomizationUpdater creates a new Kustomization updater
+// NewKustomizationUpdater creates a new Kustomization updater using in-cluster config.
 func NewKustomizationUpdater(excludeNamespaces []string) (*KustomizationUpdater, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -36,10 +36,12 @@ func NewKustomizationUpdater(excludeNamespaces []string) (*KustomizationUpdater,
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
-	return &KustomizationUpdater{
-		client:            client,
-		excludeNamespaces: excludeNamespaces,
-	}, nil
+	return NewKustomizationUpdaterWithClient(client, excludeNamespaces), nil
+}
+
+// NewKustomizationUpdaterWithClient creates a new Kustomization updater with a provided client.
+func NewKustomizationUpdaterWithClient(client dynamic.Interface, excludeNamespaces []string) *KustomizationUpdater {
+	return &KustomizationUpdater{client: client, excludeNamespaces: excludeNamespaces}
 }
 
 // TriggerUpdateAll annotates all Kustomizations to trigger webhook mutation
@@ -94,10 +96,10 @@ func (ku *KustomizationUpdater) TriggerUpdateAll() error {
 			updated++
 		}
 
-		if list.GetContinue() == "" {
+		continueToken = list.GetContinue()
+		if continueToken == "" {
 			break
 		}
-		continueToken = list.GetContinue()
 	}
 
 	attempted := updated + failCount

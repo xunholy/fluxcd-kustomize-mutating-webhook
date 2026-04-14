@@ -14,5 +14,6 @@ rules:
     verbs:
       - get
       - list
+      - watch
       - patch
 {{- end }}

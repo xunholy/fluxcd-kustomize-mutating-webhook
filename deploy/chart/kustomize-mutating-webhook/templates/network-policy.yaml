@@ -14,6 +14,7 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Allow inbound traffic on the webhook port from any source
     - ports:
         - port: {{ .Values.service.port }}
           protocol: TCP

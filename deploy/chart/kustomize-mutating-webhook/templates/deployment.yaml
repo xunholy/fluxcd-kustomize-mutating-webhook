@@ -82,6 +82,13 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: https
+              scheme: HTTPS
+            failureThreshold: 30
+            periodSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -102,5 +109,9 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/metrics"
@@ -37,7 +36,7 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	var admissionReviewReq v1.AdmissionReview
 
-	if err := jsoniter.NewDecoder(r.Body).Decode(&admissionReviewReq); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&admissionReviewReq); err != nil {
 		log.Error().Err(err).Msg("Failed to decode AdmissionReview request")
 		metrics.ErrorCount.With(prometheus.Labels{"error_type": "decode_error"}).Inc()
 		respondWithAdmissionReview(w, deniedAdmissionReview("", "Could not decode request"))

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,6 +84,19 @@ func TestRateLimitMiddleware(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
 }
 
+func TestHandleHealth(t *testing.T) {
+	req, err := http.NewRequest("GET", "/health", nil)
+	require.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(handleHealth)
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "OK", rr.Body.String())
+	assert.Equal(t, "text/plain", rr.Header().Get("Content-Type"))
+}
+
 func TestHandleReady(t *testing.T) {
 	utils.AppConfig.Mu.Lock()
 	utils.AppConfig.Config = map[string]string{"test": "value"}
@@ -142,6 +156,105 @@ func TestHandleReady(t *testing.T) {
 			assert.Equal(t, tt.expectedBody["status"], result["status"])
 			assert.Equal(t, tt.expectedBody["configLoaded"], result["configLoaded"])
 			assert.Contains(t, result, "timestamp")
+			assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 		})
 	}
+}
+
+func TestNewCertWatcher(t *testing.T) {
+	t.Run("valid cert and key loads successfully", func(t *testing.T) {
+		tempDir := t.TempDir()
+		certPath, keyPath, err := test.GenerateTestCertificate(tempDir)
+		require.NoError(t, err)
+
+		cw, err := NewCertWatcher(certPath, keyPath)
+		require.NoError(t, err)
+		assert.NotNil(t, cw)
+		cw.Stop()
+	})
+
+	t.Run("invalid path returns error", func(t *testing.T) {
+		cw, err := NewCertWatcher("/nonexistent/cert.crt", "/nonexistent/key.key")
+		assert.Error(t, err)
+		assert.Nil(t, cw)
+	})
+}
+
+func TestCertWatcher_GetCertificate(t *testing.T) {
+	tempDir := t.TempDir()
+	certPath, keyPath, err := test.GenerateTestCertificate(tempDir)
+	require.NoError(t, err)
+
+	cw, err := NewCertWatcher(certPath, keyPath)
+	require.NoError(t, err)
+	defer cw.Stop()
+
+	cert, err := cw.GetCertificate(nil)
+	require.NoError(t, err)
+	assert.NotNil(t, cert)
+}
+
+func TestCertWatcher_Watch_FileChange(t *testing.T) {
+	tempDir := t.TempDir()
+	certPath, keyPath, err := test.GenerateTestCertificate(tempDir)
+	require.NoError(t, err)
+
+	cw, err := NewCertWatcher(certPath, keyPath)
+	require.NoError(t, err)
+	defer cw.Stop()
+
+	origCert, err := cw.GetCertificate(nil)
+	require.NoError(t, err)
+	origBytes := make([]byte, len(origCert.Certificate[0]))
+	copy(origBytes, origCert.Certificate[0])
+
+	watchDone := make(chan error, 1)
+	go func() {
+		watchDone <- cw.Watch()
+	}()
+
+	// Give the watcher time to register the directory
+	time.Sleep(50 * time.Millisecond)
+
+	// Overwrite cert files with a freshly generated cert
+	_, _, err = test.GenerateTestCertificate(tempDir)
+	require.NoError(t, err)
+
+	// Wait past the 100ms debounce plus buffer
+	time.Sleep(300 * time.Millisecond)
+
+	newCert, err := cw.GetCertificate(nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, origBytes, newCert.Certificate[0], "certificate should have been reloaded after file change")
+}
+
+func TestCertWatcher_Stop(t *testing.T) {
+	tempDir := t.TempDir()
+	certPath, keyPath, err := test.GenerateTestCertificate(tempDir)
+	require.NoError(t, err)
+
+	cw, err := NewCertWatcher(certPath, keyPath)
+	require.NoError(t, err)
+
+	watchDone := make(chan error, 1)
+	go func() {
+		watchDone <- cw.Watch()
+	}()
+
+	// Give the watcher time to start
+	time.Sleep(50 * time.Millisecond)
+
+	cw.Stop()
+
+	select {
+	case err := <-watchDone:
+		assert.NoError(t, err)
+	case <-time.After(1 * time.Second):
+		t.Fatal("Watch() did not return after Stop()")
+	}
+
+	// Double Stop() must not panic
+	assert.NotPanics(t, func() {
+		cw.Stop()
+	})
 }

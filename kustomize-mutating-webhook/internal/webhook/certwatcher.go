@@ -75,6 +75,11 @@ func (cw *CertWatcher) Watch() error {
 					debounceTimer.Stop()
 				}
 				debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+					select {
+					case <-cw.done:
+						return
+					default:
+					}
 					if err := cw.loadCertificate(); err != nil {
 						log.Error().Err(err).Msg("Failed to reload certificate")
 					} else {

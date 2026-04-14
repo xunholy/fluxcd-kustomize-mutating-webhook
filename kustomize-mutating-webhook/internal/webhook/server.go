@@ -115,7 +115,9 @@ func handleReady(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(ready)
+	if err := json.NewEncoder(w).Encode(ready); err != nil {
+		log.Error().Err(err).Msg("Failed to encode ready response")
+	}
 }
 
 func conditionalLoggerMiddleware() func(http.Handler) http.Handler {

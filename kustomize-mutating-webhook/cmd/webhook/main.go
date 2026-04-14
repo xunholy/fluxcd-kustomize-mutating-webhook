@@ -11,6 +11,7 @@ import (
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/config"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/webhook"
 	"github.com/xunholy/fluxcd-mutating-webhook/pkg/utils"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -25,20 +26,26 @@ func main() {
 	namespace := config.DetectNamespace(cfg.WatchNamespace)
 	log.Info().Str("namespace", namespace).Msg("Detected watch namespace")
 
+	// Create shared rest config for all Kubernetes clients
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get in-cluster config")
+	}
+
 	// Create Kustomization updater if auto-update is enabled
 	var kustomizationUpdater *utils.KustomizationUpdater
 	if cfg.AutoUpdateKustomizations {
-		var err error
-		kustomizationUpdater, err = utils.NewKustomizationUpdater(cfg.AutoUpdateExcludeNamespaces)
+		dynamicClient, err := dynamic.NewForConfig(restConfig)
 		if err != nil {
 			log.Warn().
 				Err(err).
-				Msg("Failed to create Kustomization updater - auto-update will be disabled. " +
+				Msg("Failed to create dynamic client - auto-update will be disabled. " +
 					"This is expected if running outside Kubernetes or without proper RBAC permissions.")
 			log.Info().
 				Bool("auto_update", false).
 				Msg("Kustomization auto-update disabled (failed to initialize)")
 		} else {
+			kustomizationUpdater = utils.NewKustomizationUpdaterWithClient(dynamicClient, cfg.AutoUpdateExcludeNamespaces)
 			log.Info().
 				Bool("auto_update", true).
 				Strs("exclude_namespaces", cfg.AutoUpdateExcludeNamespaces).
@@ -49,10 +56,6 @@ func main() {
 	}
 
 	// Create Kubernetes clientset for config watching
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get in-cluster config for config informer")
-	}
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Kubernetes clientset")
@@ -86,7 +89,7 @@ func main() {
 		Msg("Starting config informer")
 	go func() {
 		if err := configInformer.Start(); err != nil {
-			log.Error().Err(err).Msg("Config informer exited with error")
+			log.Fatal().Err(err).Msg("Config informer exited with error")
 		}
 	}()
 

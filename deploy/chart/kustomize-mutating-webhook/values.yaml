@@ -26,6 +26,8 @@ serviceAccount:
   automountServiceAccountToken: true
   # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
+  # -- Annotations to add to the service account (e.g. for AWS IRSA or GKE Workload Identity)
+  annotations: {}
 
 rbac:
   # -- Create RBAC resources (ClusterRole and ClusterRoleBinding)
@@ -87,6 +89,9 @@ tolerations: []
 # -- Affinity rules for pod assignment
 affinity: {}
 
+# -- Topology spread constraints for pod scheduling
+topologySpreadConstraints: []
+
 webhook:
   # -- Failure policy for the mutating webhook (Fail or Ignore)
   failurePolicy: Fail
@@ -121,7 +126,6 @@ certManager:
 configMaps:
   - create: false
     name: cluster-config
-    optional: false
     data: {}
 
 # -- Secrets watched via the Kubernetes API for substitution variables (names passed to WATCH_SECRETS env var)

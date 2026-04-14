@@ -10,11 +10,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ServiceAccountNamespaceFile is the path to the file containing the pod's namespace.
+// It is a package-level variable so tests can override it.
+var ServiceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
 func DetectNamespace(configured string) string {
 	if configured != "" {
 		return configured
 	}
-	if ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+	if ns, err := os.ReadFile(ServiceAccountNamespaceFile); err == nil {
 		return strings.TrimSpace(string(ns))
 	}
 	return "flux-system"
