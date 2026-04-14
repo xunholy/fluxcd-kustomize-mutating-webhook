@@ -171,6 +171,7 @@ func respondWithAdmissionReview(w http.ResponseWriter, admissionResponse v1.Admi
 	respBytes, err := json.Marshal(admissionResponse)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to encode AdmissionReview response")
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

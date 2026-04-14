@@ -84,7 +84,9 @@ func TestRateLimitMiddleware(t *testing.T) {
 }
 
 func TestHandleReady(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
 	utils.AppConfig.Config = map[string]string{"test": "value"}
+	utils.AppConfig.Mu.Unlock()
 
 	tests := []struct {
 		name           string
@@ -115,7 +117,9 @@ func TestHandleReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if !tt.configLoaded {
+				utils.AppConfig.Mu.Lock()
 				utils.AppConfig.Config = map[string]string{}
+				utils.AppConfig.Mu.Unlock()
 			}
 
 			req, err := http.NewRequest("GET", "/ready", nil)

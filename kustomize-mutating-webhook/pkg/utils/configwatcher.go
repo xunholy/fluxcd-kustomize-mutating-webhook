@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -10,9 +9,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/metrics"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -26,6 +25,8 @@ type ConfigInformer struct {
 	configMapNames       map[string]bool
 	secretNames          map[string]bool
 	factory              informers.SharedInformerFactory
+	cmLister             corelisters.ConfigMapNamespaceLister
+	secretLister         corelisters.SecretNamespaceLister
 	kustomizationUpdater *KustomizationUpdater
 	autoUpdate           bool
 	updateCh             chan struct{}
@@ -66,6 +67,8 @@ func NewConfigInformer(
 		configMapNames:       cmNames,
 		secretNames:          sNames,
 		factory:              factory,
+		cmLister:             factory.Core().V1().ConfigMaps().Lister().ConfigMaps(namespace),
+		secretLister:         factory.Core().V1().Secrets().Lister().Secrets(namespace),
 		kustomizationUpdater: kustomizationUpdater,
 		autoUpdate:           autoUpdate,
 		updateCh:             make(chan struct{}, 1),
@@ -142,19 +145,18 @@ func NewConfigInformer(
 }
 
 func (ci *ConfigInformer) reloadConfig() {
-	// Capture old state for diff logging
-	oldKeys := make([]string, 0)
+	// Capture old keys for diff logging
+	oldKeySet := make(map[string]bool)
 	AppConfig.Mu.RLock()
 	oldCount := len(AppConfig.Config)
 	for key := range AppConfig.Config {
-		oldKeys = append(oldKeys, key)
+		oldKeySet[key] = true
 	}
 	AppConfig.Mu.RUnlock()
 
 	config := make(map[string]string)
-	ctx := context.Background()
 
-	// Read ConfigMaps - sort names for deterministic key ordering
+	// Read ConfigMaps from informer cache (no API call)
 	cmNames := make([]string, 0, len(ci.configMapNames))
 	for name := range ci.configMapNames {
 		cmNames = append(cmNames, name)
@@ -162,9 +164,9 @@ func (ci *ConfigInformer) reloadConfig() {
 	sort.Strings(cmNames)
 
 	for _, name := range cmNames {
-		cm, err := ci.clientset.CoreV1().ConfigMaps(ci.namespace).Get(ctx, name, metav1.GetOptions{})
+		cm, err := ci.cmLister.Get(name)
 		if err != nil {
-			log.Warn().Err(err).Str("configmap", name).Msg("Failed to get ConfigMap")
+			log.Warn().Err(err).Str("configmap", name).Msg("ConfigMap not found in cache")
 			continue
 		}
 		for k, v := range cm.Data {
@@ -172,7 +174,7 @@ func (ci *ConfigInformer) reloadConfig() {
 		}
 	}
 
-	// Read Secrets - sort names for deterministic key ordering
+	// Read Secrets from informer cache (no API call)
 	sNames := make([]string, 0, len(ci.secretNames))
 	for name := range ci.secretNames {
 		sNames = append(sNames, name)
@@ -180,9 +182,9 @@ func (ci *ConfigInformer) reloadConfig() {
 	sort.Strings(sNames)
 
 	for _, name := range sNames {
-		s, err := ci.clientset.CoreV1().Secrets(ci.namespace).Get(ctx, name, metav1.GetOptions{})
+		s, err := ci.secretLister.Get(name)
 		if err != nil {
-			log.Warn().Err(err).Str("secret", name).Msg("Failed to get Secret")
+			log.Warn().Err(err).Str("secret", name).Msg("Secret not found in cache")
 			continue
 		}
 		for k, v := range s.Data {
@@ -197,7 +199,6 @@ func (ci *ConfigInformer) reloadConfig() {
 		return
 	}
 
-	// Update AppConfig
 	AppConfig.Mu.Lock()
 	AppConfig.Config = config
 	AppConfig.Mu.Unlock()
@@ -205,17 +206,15 @@ func (ci *ConfigInformer) reloadConfig() {
 	metrics.ConfigReloads.Inc()
 
 	// Log changes
-	newKeys := make([]string, 0, len(config))
 	addedKeys := make([]string, 0)
 	removedKeys := make([]string, 0)
 	for key := range config {
-		newKeys = append(newKeys, key)
-		if !contains(oldKeys, key) {
+		if !oldKeySet[key] {
 			addedKeys = append(addedKeys, key)
 		}
 	}
-	for _, key := range oldKeys {
-		if !contains(newKeys, key) {
+	for key := range oldKeySet {
+		if _, ok := config[key]; !ok {
 			removedKeys = append(removedKeys, key)
 		}
 	}
@@ -227,7 +226,6 @@ func (ci *ConfigInformer) reloadConfig() {
 		Strs("removed_keys", removedKeys).
 		Msg("Configuration reloaded successfully")
 
-	// Trigger Kustomization updates
 	if ci.autoUpdate && ci.kustomizationUpdater != nil {
 		select {
 		case ci.updateCh <- struct{}{}:
@@ -241,15 +239,6 @@ func (ci *ConfigInformer) reloadConfig() {
 			log.Debug().Msg("Kustomization update already in progress, skipping")
 		}
 	}
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 func (ci *ConfigInformer) Start() error {

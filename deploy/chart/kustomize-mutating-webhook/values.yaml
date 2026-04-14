@@ -9,7 +9,7 @@ image:
   # -- Image pull policy
   pullPolicy: Always
   # -- Image tag (overrides the image tag whose default is the chart appVersion)
-  tag: "main-2b83233"
+  tag: ""
 
 # -- Secrets for pulling images from private registries
 imagePullSecrets: []
@@ -77,6 +77,9 @@ additionalLabels: {}
 annotations: {}
 # -- Annotations to add to the pod
 podAnnotations: {}
+
+# -- Node selector for pod assignment
+nodeSelector: {}
 
 # -- Tolerations for pod assignment
 tolerations: []

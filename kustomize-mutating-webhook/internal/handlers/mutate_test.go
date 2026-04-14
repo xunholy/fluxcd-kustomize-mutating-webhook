@@ -130,7 +130,11 @@ func TestHandleMutate(t *testing.T) {
 				var patch []map[string]interface{}
 				err = json.Unmarshal(respAR.Response.Patch, &patch)
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedPatch, patch)
+				// First two entries are structural (postBuild, substitute) and order-dependent.
+				// Remaining entries are config keys from map iteration — order is non-deterministic.
+				require.GreaterOrEqual(t, len(patch), 2)
+				assert.Equal(t, tt.expectedPatch[:2], patch[:2])
+				assert.ElementsMatch(t, tt.expectedPatch[2:], patch[2:])
 			} else {
 				assert.Nil(t, respAR.Response.Patch)
 			}
@@ -297,5 +301,7 @@ func TestCreatePatch(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, expectedPatch, patch)
+	require.GreaterOrEqual(t, len(patch), 2)
+	assert.Equal(t, expectedPatch[:2], patch[:2])
+	assert.ElementsMatch(t, expectedPatch[2:], patch[2:])
 }
