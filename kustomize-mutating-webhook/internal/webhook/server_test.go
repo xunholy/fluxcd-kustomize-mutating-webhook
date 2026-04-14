@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/config"
-	"github.com/xunholy/fluxcd-mutating-webhook/pkg/utils"
 	"github.com/xunholy/fluxcd-mutating-webhook/test"
 	"golang.org/x/time/rate"
 )
@@ -99,49 +98,32 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleReady(t *testing.T) {
-	t.Cleanup(func() {
-		utils.AppConfig.Mu.Lock()
-		utils.AppConfig.Config = nil
-		utils.AppConfig.Mu.Unlock()
-	})
-
-	utils.AppConfig.Mu.Lock()
-	utils.AppConfig.Config = map[string]string{"test": "value"}
-	utils.AppConfig.Mu.Unlock()
+	origCheck := ReadinessCheck
+	t.Cleanup(func() { ReadinessCheck = origCheck })
 
 	tests := []struct {
 		name           string
-		configLoaded   bool
+		ready          bool
 		expectedStatus int
-		expectedBody   map[string]interface{}
+		expectedStatus_ string
 	}{
 		{
-			name:           "Config loaded",
-			configLoaded:   true,
+			name:           "Informer synced",
+			ready:          true,
 			expectedStatus: http.StatusOK,
-			expectedBody: map[string]interface{}{
-				"status":       "Ready",
-				"configLoaded": true,
-			},
+			expectedStatus_: "Ready",
 		},
 		{
-			name:           "Config not loaded",
-			configLoaded:   false,
+			name:           "Informer not synced",
+			ready:          false,
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedBody: map[string]interface{}{
-				"status":       "NotReady",
-				"configLoaded": false,
-			},
+			expectedStatus_: "NotReady",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if !tt.configLoaded {
-				utils.AppConfig.Mu.Lock()
-				utils.AppConfig.Config = map[string]string{}
-				utils.AppConfig.Mu.Unlock()
-			}
+			ReadinessCheck = func() bool { return tt.ready }
 
 			req, err := http.NewRequest("GET", "/ready", nil)
 			require.NoError(t, err)
@@ -160,8 +142,7 @@ func TestHandleReady(t *testing.T) {
 			err = json.Unmarshal(body, &result)
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.expectedBody["status"], result["status"])
-			assert.Equal(t, tt.expectedBody["configLoaded"], result["configLoaded"])
+			assert.Equal(t, tt.expectedStatus_, result["status"])
 			assert.Contains(t, result, "timestamp")
 			assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 		})

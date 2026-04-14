@@ -71,6 +71,9 @@ func main() {
 		kustomizationUpdater,
 	)
 
+	// Wire readiness check to informer cache sync status
+	webhook.ReadinessCheck = configInformer.Ready
+
 	server, err := webhook.NewServer(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
