@@ -19,6 +19,13 @@ spec:
         - port: {{ .Values.service.port }}
           protocol: TCP
   egress:
+    # Allow DNS resolution (required for informer API calls)
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow outbound to Kubernetes API server
     - ports:
         - port: 443
           protocol: TCP
