@@ -56,10 +56,11 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | fullnameOverride | string | `""` | Override the full name of the release |
 | image.pullPolicy | string | `"Always"` | Image pull policy |
 | image.repository | string | `"ghcr.io/xunholy/kustomize-mutating-webhook"` | Container image repository |
-| image.tag | string | `"main-2b83233"` | Image tag (overrides the image tag whose default is the chart appVersion) |
+| image.tag | string | `""` | Image tag (overrides the image tag whose default is the chart appVersion) |
 | imagePullSecrets | list | `[]` | Secrets for pulling images from private registries |
 | nameOverride | string | `""` | Override the name of the chart |
 | networkpolicy.create | bool | `true` | Create a NetworkPolicy to restrict traffic to the webhook |
+| nodeSelector | object | `{}` | Node selector for pod assignment |
 | podAnnotations | object | `{}` | Annotations to add to the pod |
 | podDisruptionBudget.enabled | bool | `true` | Enable pod disruption budget |
 | podDisruptionBudget.minAvailable | int | `1` | Minimum number of available pods during disruptions |
