@@ -48,7 +48,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | certManager.certificateDuration | string | `"2160h"` | Certificate duration (90 days default) |
 | certManager.certificateRenewBefore | string | `"360h"` | Certificate renewal threshold (15 days before expiry) |
 | certManager.enabled | bool | `true` | Enable cert-manager integration for TLS certificate management |
-| configMaps | list | `[{"create":false,"data":{},"name":"cluster-config","optional":false}]` | ConfigMaps watched via the Kubernetes API for substitution variables (names passed to WATCH_CONFIGMAPS env var) |
+| configMaps | list | `[{"create":false,"data":{},"name":"cluster-config"}]` | ConfigMaps watched via the Kubernetes API for substitution variables (names passed to WATCH_CONFIGMAPS env var) |
 | env.AUTO_UPDATE_EXCLUDE_NAMESPACES | string | `"flux-system"` | Comma-separated list of namespaces to exclude from auto-update (default: flux-system) |
 | env.AUTO_UPDATE_KUSTOMIZATIONS | string | `"true"` | Enable automatic triggering of Kustomization updates when ConfigMaps/Secrets change |
 | env.LOG_LEVEL | string | `"info"` | Log level (debug, info, warn, error, fatal, panic) |
@@ -80,10 +80,12 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | service.headless | bool | `true` | Create a headless service (no cluster IP) |
 | service.port | int | `8443` | Service port for webhook server |
 | service.type | string | `"ClusterIP"` | Kubernetes service type |
+| serviceAccount.annotations | object | `{}` | Annotations to add to the service account (e.g. for AWS IRSA or GKE Workload Identity) |
 | serviceAccount.automountServiceAccountToken | bool | `true` | Automatically mount service account token (required for auto-update feature) |
 | serviceAccount.create | bool | `true` | Specifies whether a service account should be created |
 | serviceAccount.name | string | `""` | The name of the service account to use. If not set and create is true, a name is generated using the fullname template |
 | tolerations | list | `[]` | Tolerations for pod assignment |
+| topologySpreadConstraints | list | `[]` | Topology spread constraints for pod scheduling |
 | webhook.failurePolicy | string | `"Fail"` | Failure policy for the mutating webhook (Fail or Ignore) |
 | webhook.namespaceSelector.matchExpressions | list | `[{"key":"kubernetes.io/metadata.name","operator":"NotIn","values":["flux-system"]}]` | Match expressions to select namespaces where the webhook should apply |
 | webhook.timeoutSeconds | int | `10` | Timeout in seconds for the webhook |
