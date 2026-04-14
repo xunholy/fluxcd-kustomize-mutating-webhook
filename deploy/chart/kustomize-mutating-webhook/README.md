@@ -48,7 +48,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | certManager.certificateDuration | string | `"2160h"` | Certificate duration (90 days default) |
 | certManager.certificateRenewBefore | string | `"360h"` | Certificate renewal threshold (15 days before expiry) |
 | certManager.enabled | bool | `true` | Enable cert-manager integration for TLS certificate management |
-| configMaps | list | `[{"create":false,"data":{},"name":"cluster-config","optional":false}]` | ConfigMaps to mount into the webhook container for substitution variables |
+| configMaps | list | `[{"create":false,"data":{},"name":"cluster-config","optional":false}]` | ConfigMaps watched via the Kubernetes API for substitution variables (names passed to WATCH_CONFIGMAPS env var) |
 | env.AUTO_UPDATE_EXCLUDE_NAMESPACES | string | `"flux-system"` | Comma-separated list of namespaces to exclude from auto-update (default: flux-system) |
 | env.AUTO_UPDATE_KUSTOMIZATIONS | string | `"true"` | Enable automatic triggering of Kustomization updates when ConfigMaps/Secrets change |
 | env.LOG_LEVEL | string | `"info"` | Log level (debug, info, warn, error, fatal, panic) |
@@ -61,18 +61,18 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | nameOverride | string | `""` | Override the name of the chart |
 | networkpolicy.create | bool | `true` | Create a NetworkPolicy to restrict traffic to the webhook |
 | podAnnotations | object | `{}` | Annotations to add to the pod |
-| podDisruptionBudget.enabled | bool | `false` | Enable pod disruption budget (recommended for replicas >= 3) |
-| podDisruptionBudget.minAvailable | int | `2` | Minimum number of available pods during disruptions |
+| podDisruptionBudget.enabled | bool | `true` | Enable pod disruption budget |
+| podDisruptionBudget.minAvailable | int | `1` | Minimum number of available pods during disruptions |
 | podSecurityContext.runAsGroup | int | `1000` | Group ID to run the container as |
 | podSecurityContext.runAsNonRoot | bool | `true` | Run container as non-root user |
 | podSecurityContext.runAsUser | int | `1000` | User ID to run the container as |
 | rbac.create | bool | `true` | Create RBAC resources (ClusterRole and ClusterRoleBinding) Required for auto-update feature to list and update Kustomizations |
-| replicas | int | `1` | Number of webhook pod replicas |
+| replicas | int | `2` | Number of webhook pod replicas |
 | resources.limits.cpu | string | `"500m"` | CPU resource limits |
 | resources.limits.memory | string | `"256Mi"` | Memory resource limits |
 | resources.requests.cpu | string | `"100m"` | CPU resource requests |
 | resources.requests.memory | string | `"128Mi"` | Memory resource requests |
-| secrets | list | `[]` | Secrets to mount into the webhook container for substitution variables |
+| secrets | list | `[]` | Secrets watched via the Kubernetes API for substitution variables (names passed to WATCH_SECRETS env var) |
 | securityContext.allowPrivilegeEscalation | bool | `false` | Prevent privilege escalation |
 | securityContext.capabilities.drop | list | `["ALL"]` | Drop all capabilities |
 | securityContext.readOnlyRootFilesystem | bool | `true` | Mount root filesystem as read-only |
@@ -85,7 +85,7 @@ The following table lists the configurable parameters of the kustomize-mutating-
 | tolerations | list | `[]` | Tolerations for pod assignment |
 | webhook.failurePolicy | string | `"Fail"` | Failure policy for the mutating webhook (Fail or Ignore) |
 | webhook.namespaceSelector.matchExpressions | list | `[{"key":"kubernetes.io/metadata.name","operator":"NotIn","values":["flux-system"]}]` | Match expressions to select namespaces where the webhook should apply |
-| webhook.timeoutSeconds | int | `30` | Timeout in seconds for the webhook |
+| webhook.timeoutSeconds | int | `10` | Timeout in seconds for the webhook |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 
