@@ -252,6 +252,11 @@ func (ci *ConfigInformer) Start() error {
 
 	// Wait for informer caches to sync
 	synced := ci.factory.WaitForCacheSync(ci.done)
+	select {
+	case <-ci.done:
+		return nil
+	default:
+	}
 	for typ, ok := range synced {
 		if !ok {
 			return fmt.Errorf("failed to sync informer cache for %v", typ)

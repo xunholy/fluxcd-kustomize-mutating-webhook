@@ -410,6 +410,91 @@ func TestCreatePatch_MultipleConfigKeys(t *testing.T) {
 	}, patch[2:])
 }
 
+// TestHandleMutate_EmptyConfig verifies that when AppConfig.Config is empty and the
+// Kustomization already has postBuild.substitute, HandleMutate returns Allowed: true
+// with no patch (there are no config keys to inject).
+func TestHandleMutate_EmptyConfig(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{}
+	utils.AppConfig.Mu.Unlock()
+
+	// Kustomization already has postBuild and substitute so createPatch produces no ops.
+	inputObject := map[string]interface{}{
+		"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+		"kind":       "Kustomization",
+		"metadata": map[string]interface{}{
+			"name":      "test-kustomization",
+			"namespace": "default",
+		},
+		"spec": map[string]interface{}{
+			"postBuild": map[string]interface{}{
+				"substitute": map[string]interface{}{},
+			},
+		},
+	}
+
+	objBytes, err := json.Marshal(inputObject)
+	require.NoError(t, err)
+
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Object: runtime.RawExtension{Raw: objBytes},
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			Operation: admissionv1.Create,
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.True(t, respAR.Response.Allowed)
+	assert.Nil(t, respAR.Response.Patch, "no patch should be emitted when config is empty and structural fields already exist")
+}
+
+// TestCreatePatch_JsonPointerEscaping verifies that config keys containing '/' are
+// properly escaped to '~1' in the JSON Pointer patch path, per RFC 6901.
+func TestCreatePatch_JsonPointerEscaping(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{
+		"cluster/name": "my-cluster",
+	}
+	utils.AppConfig.Mu.Unlock()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"postBuild": map[string]interface{}{
+					"substitute": map[string]interface{}{},
+				},
+			},
+		},
+	}
+
+	patch := createPatch(obj)
+
+	// postBuild and substitute already exist, so only the key op is emitted.
+	require.Len(t, patch, 1)
+	assert.Equal(t, "/spec/postBuild/substitute/cluster~1name", patch[0]["path"])
+	assert.Equal(t, "my-cluster", patch[0]["value"])
+}
+
 func TestCreatePatch(t *testing.T) {
 	// Set up test config with proper mutex locking
 	utils.AppConfig.Mu.Lock()

@@ -67,9 +67,18 @@ func (cw *CertWatcher) Watch() error {
 		select {
 		case event, ok := <-cw.watcher.Events:
 			if !ok {
-				return errors.New("watcher channel closed")
+				select {
+				case <-cw.done:
+					return nil
+				default:
+					return errors.New("watcher channel closed")
+				}
 			}
 			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
+				base := filepath.Base(event.Name)
+				if base != filepath.Base(cw.certFile) && base != filepath.Base(cw.keyFile) {
+					continue
+				}
 				log.Info().Str("event", event.String()).Msg("Certificate files modified. Reloading...")
 				if debounceTimer != nil {
 					debounceTimer.Stop()
@@ -89,7 +98,12 @@ func (cw *CertWatcher) Watch() error {
 			}
 		case err, ok := <-cw.watcher.Errors:
 			if !ok {
-				return errors.New("watcher error channel closed")
+				select {
+				case <-cw.done:
+					return nil
+				default:
+					return errors.New("watcher error channel closed")
+				}
 			}
 			log.Error().Err(err).Msg("Error watching certificate files")
 		case <-cw.done:

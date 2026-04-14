@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -98,6 +99,12 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestHandleReady(t *testing.T) {
+	t.Cleanup(func() {
+		utils.AppConfig.Mu.Lock()
+		utils.AppConfig.Config = nil
+		utils.AppConfig.Mu.Unlock()
+	})
+
 	utils.AppConfig.Mu.Lock()
 	utils.AppConfig.Config = map[string]string{"test": "value"}
 	utils.AppConfig.Mu.Unlock()
@@ -220,12 +227,13 @@ func TestCertWatcher_Watch_FileChange(t *testing.T) {
 	_, _, err = test.GenerateTestCertificate(tempDir)
 	require.NoError(t, err)
 
-	// Wait past the 100ms debounce plus buffer
-	time.Sleep(300 * time.Millisecond)
-
-	newCert, err := cw.GetCertificate(nil)
-	require.NoError(t, err)
-	assert.NotEqual(t, origBytes, newCert.Certificate[0], "certificate should have been reloaded after file change")
+	require.Eventually(t, func() bool {
+		cert, err := cw.GetCertificate(nil)
+		if err != nil {
+			return false
+		}
+		return !bytes.Equal(origBytes, cert.Certificate[0])
+	}, 2*time.Second, 50*time.Millisecond, "certificate should have been reloaded after file change")
 }
 
 func TestCertWatcher_Stop(t *testing.T) {

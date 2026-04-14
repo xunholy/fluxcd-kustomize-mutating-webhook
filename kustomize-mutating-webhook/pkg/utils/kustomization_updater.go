@@ -2,7 +2,9 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -10,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 )
 
 var kustomizationGVR = schema.GroupVersionResource{
@@ -22,21 +23,6 @@ var kustomizationGVR = schema.GroupVersionResource{
 type KustomizationUpdater struct {
 	client            dynamic.Interface
 	excludeNamespaces []string
-}
-
-// NewKustomizationUpdater creates a new Kustomization updater using in-cluster config.
-func NewKustomizationUpdater(excludeNamespaces []string) (*KustomizationUpdater, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
-	}
-
-	return NewKustomizationUpdaterWithClient(client, excludeNamespaces), nil
 }
 
 // NewKustomizationUpdaterWithClient creates a new Kustomization updater with a provided client.
@@ -77,8 +63,18 @@ func (ku *KustomizationUpdater) TriggerUpdateAll() error {
 				continue
 			}
 
-			patchData := []byte(fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, annotationKey, annotationValue))
-			_, err := ku.client.Resource(kustomizationGVR).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patchData, metav1.PatchOptions{})
+			patch := map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"annotations": map[string]string{annotationKey: annotationValue},
+				},
+			}
+			patchData, err := json.Marshal(patch)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to marshal patch data")
+				failCount++
+				continue
+			}
+			_, err = ku.client.Resource(kustomizationGVR).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patchData, metav1.PatchOptions{})
 			if err != nil {
 				log.Error().
 					Err(err).
@@ -119,10 +115,5 @@ func (ku *KustomizationUpdater) TriggerUpdateAll() error {
 
 // isExcluded checks if a namespace is in the exclude list
 func (ku *KustomizationUpdater) isExcluded(namespace string) bool {
-	for _, excluded := range ku.excludeNamespaces {
-		if excluded == namespace {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ku.excludeNamespaces, namespace)
 }

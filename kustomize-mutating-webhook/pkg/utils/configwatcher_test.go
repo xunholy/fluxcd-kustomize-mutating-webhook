@@ -195,10 +195,9 @@ func TestConfigInformer_Stop(t *testing.T) {
 
 	ci := NewConfigInformer(clientset, "test-ns", []string{"test-config"}, nil, false, nil)
 
-	startDone := make(chan struct{})
+	startDone := make(chan error, 1)
 	go func() {
-		ci.Start() //nolint:errcheck
-		close(startDone)
+		startDone <- ci.Start()
 	}()
 
 	// Wait for Start() to have begun by checking that AppConfig has been populated
@@ -211,8 +210,8 @@ func TestConfigInformer_Stop(t *testing.T) {
 	ci.Stop()
 
 	select {
-	case <-startDone:
-		// Success - Start() returned
+	case err := <-startDone:
+		assert.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("Start() did not return after Stop() was called")
 	}
@@ -243,8 +242,11 @@ func TestConfigInformer_ConfigMapDelete(t *testing.T) {
 	err := clientset.CoreV1().ConfigMaps("test-ns").Delete(context.Background(), "test-config", metav1.DeleteOptions{})
 	require.NoError(t, err)
 
-	// Allow time for the delete event to be processed
-	time.Sleep(300 * time.Millisecond)
+	// We cannot use require.Eventually here because the empty-guard path produces no
+	// observable state change — that is exactly the invariant being tested. A sleep is
+	// the simplest reliable approach: the fake informer processes events in well under
+	// 100ms, so 500ms provides ample headroom before we assert the preserved state.
+	time.Sleep(500 * time.Millisecond)
 
 	// Old config should be preserved (empty-guard prevents clearing)
 	AppConfig.Mu.RLock()
@@ -277,8 +279,11 @@ func TestConfigInformer_SecretDelete(t *testing.T) {
 	err := clientset.CoreV1().Secrets("test-ns").Delete(context.Background(), "test-secret", metav1.DeleteOptions{})
 	require.NoError(t, err)
 
-	// Allow time for the delete event to be processed
-	time.Sleep(300 * time.Millisecond)
+	// We cannot use require.Eventually here because the empty-guard path produces no
+	// observable state change — that is exactly the invariant being tested. A sleep is
+	// the simplest reliable approach: the fake informer processes events in well under
+	// 100ms, so 500ms provides ample headroom before we assert the preserved state.
+	time.Sleep(500 * time.Millisecond)
 
 	// Old config should be preserved (empty-guard prevents clearing)
 	AppConfig.Mu.RLock()
@@ -312,8 +317,11 @@ func TestConfigInformer_PreservesOldConfig(t *testing.T) {
 	_, err := clientset.CoreV1().ConfigMaps("test-ns").Update(context.Background(), cm, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
-	// Allow time for the update event to be processed
-	time.Sleep(300 * time.Millisecond)
+	// We cannot use require.Eventually here because the empty-guard path produces no
+	// observable state change — that is exactly the invariant being tested. A sleep is
+	// the simplest reliable approach: the fake informer processes events in well under
+	// 100ms, so 500ms provides ample headroom before we assert the preserved state.
+	time.Sleep(500 * time.Millisecond)
 
 	// Old config should be preserved
 	AppConfig.Mu.RLock()

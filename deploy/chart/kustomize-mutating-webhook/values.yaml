@@ -131,7 +131,6 @@ configMaps:
 # -- Secrets watched via the Kubernetes API for substitution variables (names passed to WATCH_SECRETS env var)
 secrets: []
   # - name: my-cluster-secrets
-  #   optional: true
 
 env:
   # -- Log level (debug, info, warn, error, fatal, panic)

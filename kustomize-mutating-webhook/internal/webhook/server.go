@@ -40,6 +40,7 @@ func NewServer(cfg config.Config) (*Server, error) {
 		IdleTimeout:  60 * time.Second,
 		TLSConfig: &tls.Config{
 			GetCertificate: certWatcher.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
 		},
 	}
 
@@ -88,7 +89,7 @@ func rateLimitMiddleware(r rate.Limit, b int) func(http.Handler) http.Handler {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request) {

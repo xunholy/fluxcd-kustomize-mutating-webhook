@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -11,19 +10,9 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	// Save current environment and restore it after the test
-	oldEnv := os.Environ()
-	t.Cleanup(func() {
-		for _, env := range oldEnv {
-			pair := strings.SplitN(env, "=", 2)
-			os.Setenv(pair[0], pair[1])
-		}
-	})
-
-	// Set test environment variables
-	os.Setenv("SERVER_ADDRESS", ":9443")
-	os.Setenv("CERT_FILE", "/custom/cert/path")
-	os.Setenv("RATE_LIMIT", "200")
+	t.Setenv("SERVER_ADDRESS", ":9443")
+	t.Setenv("CERT_FILE", "/custom/cert/path")
+	t.Setenv("RATE_LIMIT", "200")
 
 	config := LoadConfig()
 
@@ -107,6 +96,9 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestInitLogger(t *testing.T) {
+	originalLevel := zerolog.GlobalLevel()
+	t.Cleanup(func() { zerolog.SetGlobalLevel(originalLevel) })
+
 	tests := []struct {
 		name          string
 		logLevel      string

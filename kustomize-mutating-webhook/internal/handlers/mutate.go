@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"time"
 
@@ -144,16 +145,13 @@ func createPatch(obj *unstructured.Unstructured) []map[string]interface{} {
 		})
 	}
 
-	// Acquire read lock before iterating to ensure we see a consistent snapshot of the config
-	// This prevents a race condition where the config might be reloaded mid-iteration
 	utils.AppConfig.Mu.RLock()
-	configSnapshot := make(map[string]string, len(utils.AppConfig.Config))
-	for key, value := range utils.AppConfig.Config {
-		configSnapshot[key] = value
-	}
+	configSnapshot := maps.Clone(utils.AppConfig.Config)
 	utils.AppConfig.Mu.RUnlock()
+	if len(configSnapshot) == 0 {
+		return nil
+	}
 
-	// Iterate over the snapshot, not the live config map
 	for key, value := range configSnapshot {
 		escapedKey := utils.EscapeJsonPointer(key)
 		patch = append(patch, map[string]interface{}{
