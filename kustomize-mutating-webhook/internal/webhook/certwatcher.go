@@ -19,6 +19,7 @@ type CertWatcher struct {
 	mu       sync.RWMutex
 	watcher  *fsnotify.Watcher
 	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func NewCertWatcher(certFile, keyFile string) (*CertWatcher, error) {
@@ -61,24 +62,48 @@ func (cw *CertWatcher) Watch() error {
 		return fmt.Errorf("failed to add directory to watcher: %w", err)
 	}
 
+	var debounceTimer *time.Timer
 	for {
 		select {
 		case event, ok := <-cw.watcher.Events:
 			if !ok {
-				return errors.New("watcher channel closed")
-			}
-			if event.Op&fsnotify.Remove == fsnotify.Remove {
-				log.Info().Msg("Certificate files modified. Reloading...")
-				time.Sleep(100 * time.Millisecond)
-				if err := cw.loadCertificate(); err != nil {
-					log.Error().Err(err).Msg("Failed to reload certificate")
-				} else {
-					log.Info().Msg("Certificate reloaded successfully")
+				select {
+				case <-cw.done:
+					return nil
+				default:
+					return errors.New("watcher channel closed")
 				}
+			}
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
+				base := filepath.Base(event.Name)
+				if base != filepath.Base(cw.certFile) && base != filepath.Base(cw.keyFile) {
+					continue
+				}
+				log.Info().Str("event", event.String()).Msg("Certificate files modified. Reloading...")
+				if debounceTimer != nil {
+					debounceTimer.Stop()
+				}
+				debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+					select {
+					case <-cw.done:
+						return
+					default:
+					}
+					if err := cw.loadCertificate(); err != nil {
+						log.Error().Err(err).Msg("Failed to reload certificate")
+					} else {
+						log.Info().Msg("Certificate reloaded successfully")
+					}
+				})
 			}
 		case err, ok := <-cw.watcher.Errors:
 			if !ok {
-				return errors.New("watcher error channel closed")
+				select {
+				case <-cw.done:
+					return nil
+				default:
+					return errors.New("watcher error channel closed")
+				}
 			}
 			log.Error().Err(err).Msg("Error watching certificate files")
 		case <-cw.done:
@@ -88,6 +113,8 @@ func (cw *CertWatcher) Watch() error {
 }
 
 func (cw *CertWatcher) Stop() {
-	close(cw.done)
-	cw.watcher.Close()
+	cw.stopOnce.Do(func() {
+		close(cw.done)
+		cw.watcher.Close()
+	})
 }

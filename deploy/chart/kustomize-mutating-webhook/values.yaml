@@ -1,7 +1,7 @@
 # Default values for kustomize-mutating-webhook.
 
 # -- Number of webhook pod replicas
-replicas: 1
+replicas: 2
 
 image:
   # -- Container image repository
@@ -9,7 +9,7 @@ image:
   # -- Image pull policy
   pullPolicy: Always
   # -- Image tag (overrides the image tag whose default is the chart appVersion)
-  tag: "main-2b83233"
+  tag: ""
 
 # -- Secrets for pulling images from private registries
 imagePullSecrets: []
@@ -26,6 +26,8 @@ serviceAccount:
   automountServiceAccountToken: true
   # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
   name: ""
+  # -- Annotations to add to the service account (e.g. for AWS IRSA or GKE Workload Identity)
+  annotations: {}
 
 rbac:
   # -- Create RBAC resources (ClusterRole and ClusterRoleBinding)
@@ -78,17 +80,23 @@ annotations: {}
 # -- Annotations to add to the pod
 podAnnotations: {}
 
+# -- Node selector for pod assignment
+nodeSelector: {}
+
 # -- Tolerations for pod assignment
 tolerations: []
 
 # -- Affinity rules for pod assignment
 affinity: {}
 
+# -- Topology spread constraints for pod scheduling
+topologySpreadConstraints: []
+
 webhook:
   # -- Failure policy for the mutating webhook (Fail or Ignore)
   failurePolicy: Fail
   # -- Timeout in seconds for the webhook
-  timeoutSeconds: 30
+  timeoutSeconds: 10
   namespaceSelector:
     # -- Match expressions to select namespaces where the webhook should apply
     matchExpressions:
@@ -114,17 +122,15 @@ certManager:
     # -- Name of the CAS cluster issuer
     name: casissuer-name
 
-# -- ConfigMaps to mount into the webhook container for substitution variables
+# -- ConfigMaps watched via the Kubernetes API for substitution variables (names passed to WATCH_CONFIGMAPS env var)
 configMaps:
   - create: false
     name: cluster-config
-    optional: false
     data: {}
 
-# -- Secrets to mount into the webhook container for substitution variables
+# -- Secrets watched via the Kubernetes API for substitution variables (names passed to WATCH_SECRETS env var)
 secrets: []
   # - name: my-cluster-secrets
-  #   optional: true
 
 env:
   # -- Log level (debug, info, warn, error, fatal, panic)
@@ -137,10 +143,10 @@ env:
   AUTO_UPDATE_EXCLUDE_NAMESPACES: "flux-system"
 
 podDisruptionBudget:
-  # -- Enable pod disruption budget (recommended for replicas >= 3)
-  enabled: false
+  # -- Enable pod disruption budget
+  enabled: true
   # -- Minimum number of available pods during disruptions
-  minAvailable: 2
+  minAvailable: 1
 
 networkpolicy:
   # -- Create a NetworkPolicy to restrict traffic to the webhook

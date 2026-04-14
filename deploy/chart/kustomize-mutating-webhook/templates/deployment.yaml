@@ -20,7 +20,7 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      maxUnavailable: 0
       maxSurge: 1
   template:
     metadata:
@@ -48,10 +48,18 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            {{- range $key, $value := .Values.env }}
+            {{- range $key := (keys .Values.env | sortAlpha) }}
             - name: {{ $key }}
-              value: {{ $value | quote }}
+              value: {{ get $.Values.env $key | quote }}
             {{- end }}
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WATCH_CONFIGMAPS
+              value: "{{ range $i, $cm := .Values.configMaps }}{{ if $i }},{{ end }}{{ $cm.name }}{{ end }}"
+            - name: WATCH_SECRETS
+              value: "{{ range $i, $s := .Values.secrets }}{{ if $i }},{{ end }}{{ $s.name }}{{ end }}"
           ports:
             - name: https
               containerPort: {{ .Values.service.port }}
@@ -63,6 +71,8 @@ spec:
               scheme: HTTPS
             initialDelaySeconds: 15
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /ready
@@ -70,38 +80,25 @@ spec:
               scheme: HTTPS
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: https
+              scheme: HTTPS
+            failureThreshold: 30
+            periodSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: webhook-certs
               mountPath: /etc/webhook/certs
               readOnly: true
-            {{- range $configMap := .Values.configMaps }}
-            - name: {{ $configMap.name }}
-              mountPath: /etc/config/{{ regexReplaceAll "\\W+" $configMap.name "_" }}
-              readOnly: true
-            {{- end }}
-            {{- range $secret := .Values.secrets }}
-            - name: {{ $secret.name }}
-              mountPath: /etc/config/{{ regexReplaceAll "\\W+" $secret.name "_" }}
-              readOnly: true
-            {{- end }}
       volumes:
         - name: webhook-certs
           secret:
             secretName: {{ include "kustomize-mutating-webhook.fullname" . }}-tls
-        {{- range $configMap := .Values.configMaps }}
-        - name: {{ $configMap.name }}
-          configMap:
-            name: {{ $configMap.name }}
-            optional: {{ $configMap.optional | default false }}
-        {{- end }}
-        {{- range $secret := .Values.secrets }}
-        - name: {{ $secret.name }}
-          secret:
-            secretName: {{ $secret.name }}
-            optional: {{ $secret.optional | default false }}
-        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -112,5 +109,9 @@ spec:
       {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
         {{- toYaml . | nindent 8 }}
       {{- end }}

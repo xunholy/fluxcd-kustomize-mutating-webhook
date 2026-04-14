@@ -2,14 +2,16 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/rest"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 )
 
 var kustomizationGVR = schema.GroupVersionResource{
@@ -23,97 +25,95 @@ type KustomizationUpdater struct {
 	excludeNamespaces []string
 }
 
-// NewKustomizationUpdater creates a new Kustomization updater
-func NewKustomizationUpdater(excludeNamespaces []string) (*KustomizationUpdater, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
-	}
-
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
-	}
-
-	return &KustomizationUpdater{
-		client:            client,
-		excludeNamespaces: excludeNamespaces,
-	}, nil
+// NewKustomizationUpdaterWithClient creates a new Kustomization updater with a provided client.
+func NewKustomizationUpdaterWithClient(client dynamic.Interface, excludeNamespaces []string) *KustomizationUpdater {
+	return &KustomizationUpdater{client: client, excludeNamespaces: excludeNamespaces}
 }
 
 // TriggerUpdateAll annotates all Kustomizations to trigger webhook mutation
 func (ku *KustomizationUpdater) TriggerUpdateAll() error {
-	ctx := context.Background()
-
-	// List all Kustomizations across all namespaces
-	list, err := ku.client.Resource(kustomizationGVR).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list kustomizations: %w", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
 	annotationKey := "webhook.kustomize-mutating-webhook/config-reload"
-	annotationValue := time.Now().Format(time.RFC3339)
+	annotationValue := time.Now().Format(time.RFC3339Nano)
 
 	updated := 0
 	skipped := 0
+	failCount := 0
 
-	for _, item := range list.Items {
-		namespace := item.GetNamespace()
-		name := item.GetName()
+	var continueToken string
+	for {
+		list, err := ku.client.Resource(kustomizationGVR).List(ctx, metav1.ListOptions{Limit: 100, Continue: continueToken})
+		if err != nil {
+			return fmt.Errorf("failed to list kustomizations: %w", err)
+		}
 
-		// Skip excluded namespaces
-		if ku.isExcluded(namespace) {
+		for _, item := range list.Items {
+			namespace := item.GetNamespace()
+			name := item.GetName()
+
+			// Skip excluded namespaces
+			if ku.isExcluded(namespace) {
+				log.Debug().
+					Str("namespace", namespace).
+					Str("name", name).
+					Msg("Skipping Kustomization in excluded namespace")
+				skipped++
+				continue
+			}
+
+			patch := map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"annotations": map[string]string{annotationKey: annotationValue},
+				},
+			}
+			patchData, err := json.Marshal(patch)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to marshal patch data")
+				failCount++
+				continue
+			}
+			_, err = ku.client.Resource(kustomizationGVR).Namespace(namespace).Patch(ctx, name, types.MergePatchType, patchData, metav1.PatchOptions{})
+			if err != nil {
+				log.Error().
+					Err(err).
+					Str("namespace", namespace).
+					Str("name", name).
+					Msg("Failed to patch Kustomization")
+				failCount++
+				continue
+			}
+
 			log.Debug().
 				Str("namespace", namespace).
 				Str("name", name).
-				Msg("Skipping Kustomization in excluded namespace")
-			skipped++
-			continue
+				Msg("Triggered update on Kustomization")
+			updated++
 		}
 
-		// Get current annotations
-		annotations := item.GetAnnotations()
-		if annotations == nil {
-			annotations = make(map[string]string)
+		continueToken = list.GetContinue()
+		if continueToken == "" {
+			break
 		}
-
-		// Add/update annotation
-		annotations[annotationKey] = annotationValue
-		item.SetAnnotations(annotations)
-
-		// Update the Kustomization
-		_, err := ku.client.Resource(kustomizationGVR).Namespace(namespace).Update(ctx, &item, metav1.UpdateOptions{})
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("namespace", namespace).
-				Str("name", name).
-				Msg("Failed to update Kustomization")
-			continue
-		}
-
-		log.Debug().
-			Str("namespace", namespace).
-			Str("name", name).
-			Msg("Triggered update on Kustomization")
-		updated++
 	}
 
+	attempted := updated + failCount
 	log.Info().
 		Int("updated", updated).
 		Int("skipped", skipped).
-		Int("total", len(list.Items)).
+		Int("failed", failCount).
+		Int("attempted", attempted).
 		Msg("Triggered Kustomization updates after config reload")
+
+	if failCount > 0 {
+		return fmt.Errorf("failed to update %d/%d kustomizations", failCount, attempted)
+	}
 
 	return nil
 }
 
 // isExcluded checks if a namespace is in the exclude list
 func (ku *KustomizationUpdater) isExcluded(namespace string) bool {
-	for _, excluded := range ku.excludeNamespaces {
-		if excluded == namespace {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ku.excludeNamespaces, namespace)
 }

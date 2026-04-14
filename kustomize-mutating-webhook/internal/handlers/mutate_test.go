@@ -130,12 +130,369 @@ func TestHandleMutate(t *testing.T) {
 				var patch []map[string]interface{}
 				err = json.Unmarshal(respAR.Response.Patch, &patch)
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedPatch, patch)
+				// First two entries are structural (postBuild, substitute) and order-dependent.
+				// Remaining entries are config keys from map iteration — order is non-deterministic.
+				require.GreaterOrEqual(t, len(patch), 2)
+				assert.Equal(t, tt.expectedPatch[:2], patch[:2])
+				assert.ElementsMatch(t, tt.expectedPatch[2:], patch[2:])
 			} else {
 				assert.Nil(t, respAR.Response.Patch)
 			}
 		})
 	}
+}
+
+// TestHandleMutate_NilRequest verifies that a decoded AdmissionReview with a nil
+// Request field returns a denied AdmissionReview JSON response instead of panicking.
+func TestHandleMutate_NilRequest(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "admission.k8s.io/v1",
+			Kind:       "AdmissionReview",
+		},
+		// Request intentionally omitted (nil)
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+	require.NotNil(t, respAR.Response.Result)
+	assert.Equal(t, "Request is nil", respAR.Response.Result.Message)
+}
+
+// TestHandleMutate_DeleteOperation verifies that DELETE requests are allowed
+// without attempting to unmarshal the (absent) Object body.
+func TestHandleMutate_DeleteOperation(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Operation: admissionv1.Delete,
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			// No Object field — DELETE requests have nil Object.Raw
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.True(t, respAR.Response.Allowed)
+	assert.Nil(t, respAR.Response.Patch)
+}
+
+// TestHandleMutate_DecodeError verifies that an invalid request body returns a
+// denied AdmissionReview JSON response (not plain text).
+func TestHandleMutate_DecodeError(t *testing.T) {
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBufferString("not valid json"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+}
+
+// TestHandleMutate_UnmarshalError verifies that a Kustomization whose Object body
+// is invalid JSON returns a denied AdmissionReview JSON response.
+func TestHandleMutate_UnmarshalError(t *testing.T) {
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Operation: admissionv1.Create,
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			// A JSON array is valid JSON but unstructured.Unstructured requires an object.
+			Object: runtime.RawExtension{Raw: []byte(`["not","an","object"]`)},
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.False(t, respAR.Response.Allowed)
+	require.NotNil(t, respAR.Response.Result)
+	assert.Equal(t, "Failed to unmarshal Object", respAR.Response.Result.Message)
+}
+
+// TestCreatePatch_ExistingPostBuild verifies that when spec.postBuild already exists
+// (but spec.postBuild.substitute does not), createPatch omits the /spec/postBuild add
+// op but still adds the /spec/postBuild/substitute op and all config key ops.
+func TestCreatePatch_ExistingPostBuild(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{
+		"TEST_KEY": "test_value",
+	}
+	utils.AppConfig.Mu.Unlock()
+
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"spec": map[string]interface{}{
+			"postBuild": map[string]interface{}{},
+		},
+	}}
+
+	patch := createPatch(obj)
+
+	for _, op := range patch {
+		assert.NotEqual(t, "/spec/postBuild", op["path"], "patch must not add /spec/postBuild when it already exists")
+	}
+
+	var foundSubstitute bool
+	for _, op := range patch {
+		if op["path"] == "/spec/postBuild/substitute" {
+			foundSubstitute = true
+			break
+		}
+	}
+	assert.True(t, foundSubstitute, "patch must include /spec/postBuild/substitute add op")
+}
+
+// TestCreatePatch_ExistingPostBuildAndSubstitute verifies that when both spec.postBuild
+// and spec.postBuild.substitute already exist, createPatch omits both structural ops and
+// only emits the individual config key ops.
+func TestCreatePatch_ExistingPostBuildAndSubstitute(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{
+		"TEST_KEY": "test_value",
+	}
+	utils.AppConfig.Mu.Unlock()
+
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"spec": map[string]interface{}{
+			"postBuild": map[string]interface{}{
+				"substitute": map[string]interface{}{
+					"EXISTING_KEY": "existing_value",
+				},
+			},
+		},
+	}}
+
+	patch := createPatch(obj)
+
+	for _, op := range patch {
+		assert.NotEqual(t, "/spec/postBuild", op["path"], "patch must not add /spec/postBuild when it already exists")
+		assert.NotEqual(t, "/spec/postBuild/substitute", op["path"], "patch must not add /spec/postBuild/substitute when it already exists")
+	}
+
+	assert.ElementsMatch(t, []map[string]interface{}{
+		{"op": "add", "path": "/spec/postBuild/substitute/TEST_KEY", "value": "test_value"},
+	}, patch)
+}
+
+// TestHandleMutate_DeletionTimestamp verifies that a Kustomization with a non-zero
+// DeletionTimestamp is allowed through with no patch applied.
+func TestHandleMutate_DeletionTimestamp(t *testing.T) {
+	inputObject := map[string]interface{}{
+		"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+		"kind":       "Kustomization",
+		"metadata": map[string]interface{}{
+			"name":              "test-kustomization",
+			"namespace":         "default",
+			"deletionTimestamp": "2026-01-01T00:00:00Z",
+		},
+		"spec": map[string]interface{}{},
+	}
+
+	objBytes, err := json.Marshal(inputObject)
+	require.NoError(t, err)
+
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Object: runtime.RawExtension{Raw: objBytes},
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			Operation: admissionv1.Update,
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.True(t, respAR.Response.Allowed)
+	assert.Nil(t, respAR.Response.Patch)
+}
+
+// TestCreatePatch_MultipleConfigKeys verifies that createPatch emits an op for every
+// key in AppConfig.Config regardless of map iteration order.
+func TestCreatePatch_MultipleConfigKeys(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{
+		"KEY_ONE":   "value_one",
+		"KEY_TWO":   "value_two",
+		"KEY_THREE": "value_three",
+	}
+	utils.AppConfig.Mu.Unlock()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{},
+		},
+	}
+
+	patch := createPatch(obj)
+
+	require.GreaterOrEqual(t, len(patch), 2)
+	assert.Equal(t, "/spec/postBuild", patch[0]["path"])
+	assert.Equal(t, "/spec/postBuild/substitute", patch[1]["path"])
+
+	assert.ElementsMatch(t, []map[string]interface{}{
+		{"op": "add", "path": "/spec/postBuild/substitute/KEY_ONE", "value": "value_one"},
+		{"op": "add", "path": "/spec/postBuild/substitute/KEY_TWO", "value": "value_two"},
+		{"op": "add", "path": "/spec/postBuild/substitute/KEY_THREE", "value": "value_three"},
+	}, patch[2:])
+}
+
+// TestHandleMutate_EmptyConfig verifies that when AppConfig.Config is empty and the
+// Kustomization already has postBuild.substitute, HandleMutate returns Allowed: true
+// with no patch (there are no config keys to inject).
+func TestHandleMutate_EmptyConfig(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{}
+	utils.AppConfig.Mu.Unlock()
+
+	// Kustomization already has postBuild and substitute so createPatch produces no ops.
+	inputObject := map[string]interface{}{
+		"apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+		"kind":       "Kustomization",
+		"metadata": map[string]interface{}{
+			"name":      "test-kustomization",
+			"namespace": "default",
+		},
+		"spec": map[string]interface{}{
+			"postBuild": map[string]interface{}{
+				"substitute": map[string]interface{}{},
+			},
+		},
+	}
+
+	objBytes, err := json.Marshal(inputObject)
+	require.NoError(t, err)
+
+	ar := admissionv1.AdmissionReview{
+		Request: &admissionv1.AdmissionRequest{
+			Object: runtime.RawExtension{Raw: objBytes},
+			Kind: metav1.GroupVersionKind{
+				Group:   "kustomize.toolkit.fluxcd.io",
+				Version: "v1",
+				Kind:    "Kustomization",
+			},
+			Operation: admissionv1.Create,
+		},
+	}
+
+	arBytes, err := json.Marshal(ar)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest("POST", "/mutate", bytes.NewBuffer(arBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	HandleMutate(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	var respAR admissionv1.AdmissionReview
+	err = json.Unmarshal(rr.Body.Bytes(), &respAR)
+	require.NoError(t, err)
+
+	assert.True(t, respAR.Response.Allowed)
+	assert.Nil(t, respAR.Response.Patch, "no patch should be emitted when config is empty and structural fields already exist")
+}
+
+// TestCreatePatch_JsonPointerEscaping verifies that config keys containing '/' are
+// properly escaped to '~1' in the JSON Pointer patch path, per RFC 6901.
+func TestCreatePatch_JsonPointerEscaping(t *testing.T) {
+	utils.AppConfig.Mu.Lock()
+	utils.AppConfig.Config = map[string]string{
+		"cluster/name": "my-cluster",
+	}
+	utils.AppConfig.Mu.Unlock()
+
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"postBuild": map[string]interface{}{
+					"substitute": map[string]interface{}{},
+				},
+			},
+		},
+	}
+
+	patch := createPatch(obj)
+
+	// postBuild and substitute already exist, so only the key op is emitted.
+	require.Len(t, patch, 1)
+	assert.Equal(t, "/spec/postBuild/substitute/cluster~1name", patch[0]["path"])
+	assert.Equal(t, "my-cluster", patch[0]["value"])
 }
 
 func TestCreatePatch(t *testing.T) {
@@ -172,5 +529,7 @@ func TestCreatePatch(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, expectedPatch, patch)
+	require.GreaterOrEqual(t, len(patch), 2)
+	assert.Equal(t, expectedPatch[:2], patch[:2])
+	assert.ElementsMatch(t, expectedPatch[2:], patch[2:])
 }

@@ -3,7 +3,7 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: kustomize-mutating-webhook
+  name: {{ include "kustomize-mutating-webhook.fullname" . }}
   labels:
     {{- include "kustomize-mutating-webhook.labels" . | nindent 4 }}
 spec:
@@ -14,17 +14,24 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow Kubernetes API server to connect with port 8443
-    - from:
-      ports:
+    # Allow inbound traffic on the webhook port from any source
+    - ports:
         - port: {{ .Values.service.port }}
           protocol: TCP
   egress:
-    # Allow Webhook server to connect with Kubernetes API server on port 443
+    # Allow DNS resolution (required for informer API calls)
     - ports:
-      - port: 443
-        protocol: TCP
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow outbound to Kubernetes API server
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
       to:
-      - ipBlock:
-          cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: 0.0.0.0/0
 {{- end }}

@@ -1,156 +1,278 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"sort"
+	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/rs/zerolog/log"
+	"github.com/xunholy/fluxcd-mutating-webhook/internal/metrics"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
-type ConfigWatcher struct {
-	configDir             string
-	watcher               *fsnotify.Watcher
-	done                  chan struct{}
-	kustomizationUpdater  *KustomizationUpdater
-	autoUpdate            bool
+const (
+	resyncPeriod = 5 * time.Minute
+)
+
+type ConfigInformer struct {
+	clientset            kubernetes.Interface
+	namespace            string
+	configMapNames       map[string]bool
+	secretNames          map[string]bool
+	factory              informers.SharedInformerFactory
+	cmLister             corelisters.ConfigMapNamespaceLister
+	secretLister         corelisters.SecretNamespaceLister
+	kustomizationUpdater *KustomizationUpdater
+	autoUpdate           bool
+	updateCh             chan struct{}
+	done                 chan struct{}
+	stopOnce             sync.Once
 }
 
-func NewConfigWatcher(configDir string, autoUpdate bool, kustomizationUpdater *KustomizationUpdater) (*ConfigWatcher, error) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file watcher: %w", err)
+func NewConfigInformer(
+	clientset kubernetes.Interface,
+	namespace string,
+	configMapNames []string,
+	secretNames []string,
+	autoUpdate bool,
+	kustomizationUpdater *KustomizationUpdater,
+) *ConfigInformer {
+	cmNames := make(map[string]bool, len(configMapNames))
+	for _, name := range configMapNames {
+		if name != "" {
+			cmNames[name] = true
+		}
+	}
+	sNames := make(map[string]bool, len(secretNames))
+	for _, name := range secretNames {
+		if name != "" {
+			sNames[name] = true
+		}
 	}
 
-	cw := &ConfigWatcher{
-		configDir:            configDir,
-		watcher:              watcher,
-		done:                 make(chan struct{}),
+	factory := informers.NewSharedInformerFactoryWithOptions(
+		clientset,
+		resyncPeriod,
+		informers.WithNamespace(namespace),
+	)
+
+	ci := &ConfigInformer{
+		clientset:            clientset,
+		namespace:            namespace,
+		configMapNames:       cmNames,
+		secretNames:          sNames,
+		factory:              factory,
+		cmLister:             factory.Core().V1().ConfigMaps().Lister().ConfigMaps(namespace),
+		secretLister:         factory.Core().V1().Secrets().Lister().Secrets(namespace),
 		kustomizationUpdater: kustomizationUpdater,
 		autoUpdate:           autoUpdate,
+		updateCh:             make(chan struct{}, 1),
+		done:                 make(chan struct{}),
 	}
-	return cw, nil
+
+	// Register event handlers for ConfigMaps
+	if len(cmNames) > 0 {
+		factory.Core().V1().ConfigMaps().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				cm := obj.(*corev1.ConfigMap)
+				if cmNames[cm.Name] {
+					log.Info().Str("configmap", cm.Name).Msg("ConfigMap added, reloading config")
+					ci.reloadConfig()
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				cm := newObj.(*corev1.ConfigMap)
+				if cmNames[cm.Name] {
+					log.Info().Str("configmap", cm.Name).Msg("ConfigMap updated, reloading config")
+					ci.reloadConfig()
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+					obj = d.Obj
+				}
+				cm, ok := obj.(*corev1.ConfigMap)
+				if !ok {
+					return
+				}
+				if cmNames[cm.Name] {
+					log.Info().Str("configmap", cm.Name).Msg("ConfigMap deleted, reloading config")
+					ci.reloadConfig()
+				}
+			},
+		})
+	}
+
+	// Register event handlers for Secrets
+	if len(sNames) > 0 {
+		factory.Core().V1().Secrets().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				s := obj.(*corev1.Secret)
+				if sNames[s.Name] {
+					log.Info().Str("secret", s.Name).Msg("Secret added, reloading config")
+					ci.reloadConfig()
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				s := newObj.(*corev1.Secret)
+				if sNames[s.Name] {
+					log.Info().Str("secret", s.Name).Msg("Secret updated, reloading config")
+					ci.reloadConfig()
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+					obj = d.Obj
+				}
+				s, ok := obj.(*corev1.Secret)
+				if !ok {
+					return
+				}
+				if sNames[s.Name] {
+					log.Info().Str("secret", s.Name).Msg("Secret deleted, reloading config")
+					ci.reloadConfig()
+				}
+			},
+		})
+	}
+
+	return ci
 }
 
-func (cw *ConfigWatcher) reloadConfig() {
-	oldCount := 0
-	oldKeys := make([]string, 0)
+func (ci *ConfigInformer) reloadConfig() {
+	// Capture old keys for diff logging
+	oldKeySet := make(map[string]bool)
 	AppConfig.Mu.RLock()
-	oldCount = len(AppConfig.Config)
+	oldCount := len(AppConfig.Config)
 	for key := range AppConfig.Config {
-		oldKeys = append(oldKeys, key)
+		oldKeySet[key] = true
 	}
 	AppConfig.Mu.RUnlock()
 
-	log.Info().Str("config_dir", cw.configDir).Msg("Reloading configuration from directory")
+	config := make(map[string]string)
 
-	if err := ReadConfigDirectory(cw.configDir); err != nil {
-		log.Error().
-			Err(err).
-			Str("config_dir", cw.configDir).
+	// Read ConfigMaps from informer cache (no API call)
+	cmNames := make([]string, 0, len(ci.configMapNames))
+	for name := range ci.configMapNames {
+		cmNames = append(cmNames, name)
+	}
+	sort.Strings(cmNames)
+
+	for _, name := range cmNames {
+		cm, err := ci.cmLister.Get(name)
+		if err != nil {
+			log.Warn().Err(err).Str("configmap", name).Msg("ConfigMap not found in cache")
+			continue
+		}
+		for k, v := range cm.Data {
+			config[k] = v
+		}
+	}
+
+	// Read Secrets from informer cache (no API call)
+	sNames := make([]string, 0, len(ci.secretNames))
+	for name := range ci.secretNames {
+		sNames = append(sNames, name)
+	}
+	sort.Strings(sNames)
+
+	for _, name := range sNames {
+		s, err := ci.secretLister.Get(name)
+		if err != nil {
+			log.Warn().Err(err).Str("secret", name).Msg("Secret not found in cache")
+			continue
+		}
+		for k, v := range s.Data {
+			config[k] = string(v)
+		}
+	}
+
+	if len(config) == 0 && oldCount > 0 {
+		log.Warn().
 			Int("old_count", oldCount).
-			Msg("Failed to reload configuration - keeping old config")
+			Msg("All watched ConfigMaps/Secrets returned empty data, preserving existing config")
 		return
 	}
 
-	newCount := 0
-	newKeys := make([]string, 0)
+	AppConfig.Mu.Lock()
+	AppConfig.Config = config
+	AppConfig.Mu.Unlock()
+
+	metrics.ConfigReloads.Inc()
+
+	// Log changes
 	addedKeys := make([]string, 0)
 	removedKeys := make([]string, 0)
-
-	AppConfig.Mu.RLock()
-	newCount = len(AppConfig.Config)
-	for key := range AppConfig.Config {
-		newKeys = append(newKeys, key)
-		if !contains(oldKeys, key) {
+	for key := range config {
+		if !oldKeySet[key] {
 			addedKeys = append(addedKeys, key)
 		}
 	}
-	for _, key := range oldKeys {
-		if !contains(newKeys, key) {
+	for key := range oldKeySet {
+		if _, ok := config[key]; !ok {
 			removedKeys = append(removedKeys, key)
 		}
 	}
-	AppConfig.Mu.RUnlock()
 
 	log.Info().
 		Int("old_count", oldCount).
-		Int("new_count", newCount).
+		Int("new_count", len(config)).
 		Strs("added_keys", addedKeys).
 		Strs("removed_keys", removedKeys).
 		Msg("Configuration reloaded successfully")
 
-	// Trigger Kustomization updates if auto-update is enabled
-	if cw.autoUpdate && cw.kustomizationUpdater != nil {
-		go func() {
-			if err := cw.kustomizationUpdater.TriggerUpdateAll(); err != nil {
-				log.Error().Err(err).Msg("Failed to trigger Kustomization updates")
-			}
-		}()
-	}
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
-// addSubdirsToWatcher recursively adds all subdirectories to the fsnotify watcher
-func (cw *ConfigWatcher) addSubdirsToWatcher() error {
-	return filepath.WalkDir(cw.configDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			log.Debug().Str("path", path).Msg("Adding directory to watcher")
-			if err := cw.watcher.Add(path); err != nil {
-				return fmt.Errorf("failed to add directory %s to watcher: %w", path, err)
-			}
-		}
-		return nil
-	})
-}
-
-func (cw *ConfigWatcher) Watch() error {
-	// Recursively add all subdirectories to the watcher
-	// This is necessary because Kubernetes mounts ConfigMaps/Secrets as subdirectories
-	if err := cw.addSubdirsToWatcher(); err != nil {
-		return fmt.Errorf("failed to add directories to watcher: %w", err)
-	}
-
-	for {
+	if ci.autoUpdate && ci.kustomizationUpdater != nil {
 		select {
-		case event, ok := <-cw.watcher.Events:
-			if !ok {
-				return errors.New("watcher channel closed")
-			}
-			// React to file modifications, creations, deletions, and renames
-			// This handles Kubernetes ConfigMap/Secret updates which use symlink swapping
-			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
-				log.Info().Str("event", event.String()).Msg("Config directory modified. Reloading...")
-				// Sleep briefly to allow Kubernetes to complete atomic ConfigMap/Secret updates
-				time.Sleep(100 * time.Millisecond)
-				cw.reloadConfig()
-			}
-		case err, ok := <-cw.watcher.Errors:
-			if !ok {
-				return errors.New("watcher error channel closed")
-			}
-			log.Error().Err(err).Msg("Error watching config files")
-		case <-cw.done:
-			return nil
+		case ci.updateCh <- struct{}{}:
+			go func() {
+				defer func() { <-ci.updateCh }()
+				if err := ci.kustomizationUpdater.TriggerUpdateAll(); err != nil {
+					log.Error().Err(err).Msg("Failed to trigger Kustomization updates")
+				}
+			}()
+		default:
+			log.Debug().Msg("Kustomization update already in progress, skipping")
 		}
 	}
 }
 
-func (cw *ConfigWatcher) Stop() {
-	close(cw.done)
-	cw.watcher.Close()
+func (ci *ConfigInformer) Start() error {
+	log.Info().
+		Str("namespace", ci.namespace).
+		Int("configmaps", len(ci.configMapNames)).
+		Int("secrets", len(ci.secretNames)).
+		Msg("Starting config informer")
+
+	ci.factory.Start(ci.done)
+
+	// Wait for informer caches to sync
+	synced := ci.factory.WaitForCacheSync(ci.done)
+	select {
+	case <-ci.done:
+		return nil
+	default:
+	}
+	for typ, ok := range synced {
+		if !ok {
+			return fmt.Errorf("failed to sync informer cache for %v", typ)
+		}
+	}
+
+	log.Info().Msg("Informer caches synced, performing initial config load")
+	ci.reloadConfig()
+
+	// Block until stopped
+	<-ci.done
+	return nil
+}
+
+func (ci *ConfigInformer) Stop() {
+	ci.stopOnce.Do(func() {
+		close(ci.done)
+	})
 }

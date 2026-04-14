@@ -2,7 +2,7 @@ package config
 
 import (
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -10,26 +10,15 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	// Save current environment and restore it after the test
-	oldEnv := os.Environ()
-	t.Cleanup(func() {
-		for _, env := range oldEnv {
-			pair := strings.SplitN(env, "=", 2)
-			os.Setenv(pair[0], pair[1])
-		}
-	})
-
-	// Set test environment variables
-	os.Setenv("SERVER_ADDRESS", ":9443")
-	os.Setenv("CERT_FILE", "/custom/cert/path")
-	os.Setenv("RATE_LIMIT", "200")
+	t.Setenv("SERVER_ADDRESS", ":9443")
+	t.Setenv("CERT_FILE", "/custom/cert/path")
+	t.Setenv("RATE_LIMIT", "200")
 
 	config := LoadConfig()
 
 	assert.Equal(t, ":9443", config.ServerAddress)
 	assert.Equal(t, "/custom/cert/path", config.CertFile)
 	assert.Equal(t, defaultKeyFile, config.KeyFile)
-	assert.Equal(t, defaultConfigDir, config.ConfigDir)
 	assert.Equal(t, defaultLogLevel, config.LogLevel)
 	assert.Equal(t, 200, config.RateLimit)
 }
@@ -46,7 +35,6 @@ func TestValidateConfig(t *testing.T) {
 				ServerAddress: ":8443",
 				CertFile:      "/path/to/cert",
 				KeyFile:       "/path/to/key",
-				ConfigDir:     "/path/to/config",
 				LogLevel:      "info",
 				RateLimit:     100,
 			},
@@ -57,7 +45,6 @@ func TestValidateConfig(t *testing.T) {
 			config: Config{
 				CertFile:  "/path/to/cert",
 				KeyFile:   "/path/to/key",
-				ConfigDir: "/path/to/config",
 				LogLevel:  "info",
 				RateLimit: 100,
 			},
@@ -69,11 +56,30 @@ func TestValidateConfig(t *testing.T) {
 				ServerAddress: ":8443",
 				CertFile:      "/path/to/cert",
 				KeyFile:       "/path/to/key",
-				ConfigDir:     "/path/to/config",
 				LogLevel:      "info",
 				RateLimit:     0,
 			},
 			expectedErr: "rate limit must be greater than 0",
+		},
+		{
+			name: "Missing cert file",
+			config: Config{
+				ServerAddress: ":8443",
+				CertFile:      "",
+				KeyFile:       "/path",
+				RateLimit:     100,
+			},
+			expectedErr: "certificate file path is required",
+		},
+		{
+			name: "Missing key file",
+			config: Config{
+				ServerAddress: ":8443",
+				CertFile:      "/path",
+				KeyFile:       "",
+				RateLimit:     100,
+			},
+			expectedErr: "key file path is required",
 		},
 	}
 
@@ -90,6 +96,9 @@ func TestValidateConfig(t *testing.T) {
 }
 
 func TestInitLogger(t *testing.T) {
+	originalLevel := zerolog.GlobalLevel()
+	t.Cleanup(func() { zerolog.SetGlobalLevel(originalLevel) })
+
 	tests := []struct {
 		name          string
 		logLevel      string
@@ -108,4 +117,31 @@ func TestInitLogger(t *testing.T) {
 			assert.Equal(t, tt.expectedLevel, zerolog.GlobalLevel().String())
 		})
 	}
+}
+
+func TestDetectNamespace(t *testing.T) {
+	original := ServiceAccountNamespaceFile
+	t.Cleanup(func() { ServiceAccountNamespaceFile = original })
+
+	t.Run("Returns configured value when non-empty", func(t *testing.T) {
+		ns := DetectNamespace("my-namespace")
+		assert.Equal(t, "my-namespace", ns)
+	})
+
+	t.Run("Reads namespace from service account file when configured is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		nsFile := filepath.Join(dir, "namespace")
+		if err := os.WriteFile(nsFile, []byte("  kube-system\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		ServiceAccountNamespaceFile = nsFile
+		ns := DetectNamespace("")
+		assert.Equal(t, "kube-system", ns)
+	})
+
+	t.Run("Returns flux-system when configured is empty and file does not exist", func(t *testing.T) {
+		ServiceAccountNamespaceFile = "/nonexistent/path/namespace"
+		ns := DetectNamespace("")
+		assert.Equal(t, "flux-system", ns)
+	})
 }
