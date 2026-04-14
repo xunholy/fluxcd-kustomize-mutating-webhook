@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.9.0...kustomize-mutating-webhook-chart-v0.10.0) (2026-04-14)
+
+
+### Features
+
+* fix stability bugs and switch to native K8s config watching ([a1598c0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/a1598c0b94baa153126eab7479da834a842362f5))
+* implement remaining review findings and best practices ([b0afa3b](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/b0afa3bb7016c4565d61e90c20239ab6736d2197))
+
+
+### Bug Fixes
+
+* add DNS egress rule to NetworkPolicy ([a75c6b6](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/a75c6b6eb0a1d2866a112c3d1c6156ac1ab50b1a))
+* address final review findings ([cfef9a2](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/cfef9a26d04de6a4108af06ce37abf6f9086d0eb))
+* resolve shutdown races, JSON injection, and test quality issues ([e6b497d](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/e6b497d093d917d2c9d36b948d07b1fe60dfd104))
+
 ## [0.9.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.8.0...kustomize-mutating-webhook-chart-v0.9.0) (2026-03-17)
 
 
