@@ -163,6 +163,7 @@ func (ci *ConfigInformer) reloadConfig() {
 	}
 	sort.Strings(cmNames)
 
+	var invalidKeys []string
 	for _, name := range cmNames {
 		cm, err := ci.cmLister.Get(name)
 		if err != nil {
@@ -170,6 +171,11 @@ func (ci *ConfigInformer) reloadConfig() {
 			continue
 		}
 		for k, v := range cm.Data {
+			if !IsValidSubstituteKey(k) {
+				invalidKeys = append(invalidKeys, k)
+				log.Warn().Str("key", k).Str("configmap", name).Msg("Skipping invalid substitute key (must match ^[_a-zA-Z][_a-zA-Z0-9]*$)")
+				continue
+			}
 			config[k] = v
 		}
 	}
@@ -188,8 +194,20 @@ func (ci *ConfigInformer) reloadConfig() {
 			continue
 		}
 		for k, v := range s.Data {
+			if !IsValidSubstituteKey(k) {
+				invalidKeys = append(invalidKeys, k)
+				log.Warn().Str("key", k).Str("secret", name).Msg("Skipping invalid substitute key (must match ^[_a-zA-Z][_a-zA-Z0-9]*$)")
+				continue
+			}
 			config[k] = string(v)
 		}
+	}
+
+	if len(invalidKeys) > 0 {
+		log.Warn().
+			Int("count", len(invalidKeys)).
+			Strs("keys", invalidKeys).
+			Msg("Invalid substitute keys skipped (Flux requires ^[_a-zA-Z][_a-zA-Z0-9]*$)")
 	}
 
 	if len(config) == 0 && oldCount > 0 {

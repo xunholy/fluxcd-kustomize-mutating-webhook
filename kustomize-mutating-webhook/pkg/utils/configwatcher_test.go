@@ -153,15 +153,15 @@ func TestConfigInformer_MultipleResources(t *testing.T) {
 
 	cm1 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "config1", Namespace: "test-ns"},
-		Data:       map[string]string{"cm-key1": "cm-val1"},
+		Data:       map[string]string{"CM_KEY1": "cm-val1"},
 	}
 	cm2 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "config2", Namespace: "test-ns"},
-		Data:       map[string]string{"cm-key2": "cm-val2"},
+		Data:       map[string]string{"CM_KEY2": "cm-val2"},
 	}
 	s := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "test-ns"},
-		Data:       map[string][]byte{"sec-key1": []byte("sec-val1")},
+		Data:       map[string][]byte{"SEC_KEY1": []byte("sec-val1")},
 	}
 	clientset := fake.NewSimpleClientset(cm1, cm2, s)
 
@@ -178,9 +178,9 @@ func TestConfigInformer_MultipleResources(t *testing.T) {
 	}, 5*time.Second, 50*time.Millisecond)
 
 	AppConfig.Mu.RLock()
-	assert.Equal(t, "cm-val1", AppConfig.Config["cm-key1"])
-	assert.Equal(t, "cm-val2", AppConfig.Config["cm-key2"])
-	assert.Equal(t, "sec-val1", AppConfig.Config["sec-key1"])
+	assert.Equal(t, "cm-val1", AppConfig.Config["CM_KEY1"])
+	assert.Equal(t, "cm-val2", AppConfig.Config["CM_KEY2"])
+	assert.Equal(t, "sec-val1", AppConfig.Config["SEC_KEY1"])
 	AppConfig.Mu.RUnlock()
 }
 
@@ -380,4 +380,43 @@ func TestConfigInformer_AutoUpdateTrigger(t *testing.T) {
 		}
 		return false
 	}, 5*time.Second, 50*time.Millisecond, "auto-update should patch kustomizations after config change")
+}
+
+func TestConfigInformer_InvalidKeysSkipped(t *testing.T) {
+	resetAppConfig()
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		Data: map[string]string{
+			"VALID_KEY":    "good",
+			"ALSO_VALID":   "good",
+			"INVALID-KEY":  "bad-hyphen",
+			"123_BAD":      "bad-starts-with-digit",
+			"has space":    "bad-space",
+		},
+	}
+	clientset := fake.NewSimpleClientset(cm)
+
+	ci := NewConfigInformer(clientset, "test-ns", []string{"test-config"}, nil, false, nil)
+
+	go ci.Start()
+	defer ci.Stop()
+
+	require.Eventually(t, func() bool {
+		AppConfig.Mu.RLock()
+		defer AppConfig.Mu.RUnlock()
+		return len(AppConfig.Config) == 2
+	}, 5*time.Second, 50*time.Millisecond)
+
+	AppConfig.Mu.RLock()
+	assert.Equal(t, "good", AppConfig.Config["VALID_KEY"])
+	assert.Equal(t, "good", AppConfig.Config["ALSO_VALID"])
+	_, hasInvalid := AppConfig.Config["INVALID-KEY"]
+	_, hasDigit := AppConfig.Config["123_BAD"]
+	_, hasSpace := AppConfig.Config["has space"]
+	AppConfig.Mu.RUnlock()
+
+	assert.False(t, hasInvalid, "hyphenated key should be skipped")
+	assert.False(t, hasDigit, "digit-starting key should be skipped")
+	assert.False(t, hasSpace, "space key should be skipped")
 }

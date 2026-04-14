@@ -6,6 +6,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestIsValidSubstituteKey(t *testing.T) {
+	tests := []struct {
+		key   string
+		valid bool
+	}{
+		{"CLUSTER_NAME", true},
+		{"_PRIVATE", true},
+		{"a", true},
+		{"A1B2C3", true},
+		{"_", true},
+		{"__double__", true},
+		{"CLUSTER-NAME", false},   // hyphen not allowed
+		{"cluster.name", false},   // dot not allowed
+		{"123_START", false},      // starts with digit
+		{"", false},               // empty
+		{"HAS SPACE", false},      // space not allowed
+		{"key/slash", false},      // slash not allowed
+		{"key=value", false},      // equals not allowed
+		{"café", false},           // non-ASCII not allowed
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			assert.Equal(t, tt.valid, IsValidSubstituteKey(tt.key), "key: %q", tt.key)
+		})
+	}
+}
+
 func TestEscapeJsonPointer(t *testing.T) {
 	tests := []struct {
 		name     string
