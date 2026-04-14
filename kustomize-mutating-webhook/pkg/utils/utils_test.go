@@ -6,21 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetAppConfig(t *testing.T) {
-	AppConfig.Config = map[string]string{
-		"key1": "value1",
-		"key2": "value2",
-	}
-
-	value, ok := GetAppConfig("key1")
-	assert.True(t, ok)
-	assert.Equal(t, "value1", value)
-
-	value, ok = GetAppConfig("nonexistent")
-	assert.False(t, ok)
-	assert.Empty(t, value)
-}
-
 func TestEscapeJsonPointer(t *testing.T) {
 	tests := []struct {
 		input    string

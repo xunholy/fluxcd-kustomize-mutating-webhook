@@ -48,7 +48,7 @@ func (ku *KustomizationUpdater) TriggerUpdateAll() error {
 	defer cancel()
 
 	annotationKey := "webhook.kustomize-mutating-webhook/config-reload"
-	annotationValue := time.Now().Format(time.RFC3339)
+	annotationValue := time.Now().Format(time.RFC3339Nano)
 
 	updated := 0
 	skipped := 0

@@ -2,10 +2,9 @@ package webhook
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,9 +16,7 @@ import (
 )
 
 func TestNewServer(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "webhook-test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	certPath, keyPath, err := test.GenerateTestCertificate(tempDir)
 	require.NoError(t, err)
@@ -28,7 +25,6 @@ func TestNewServer(t *testing.T) {
 		ServerAddress: ":8443",
 		CertFile:      certPath,
 		KeyFile:       keyPath,
-		ConfigDir:     tempDir,
 		LogLevel:      "info",
 		RateLimit:     100,
 	}
@@ -132,7 +128,7 @@ func TestHandleReady(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, rr.Code)
 
-			body, err := ioutil.ReadAll(rr.Body)
+			body, err := io.ReadAll(rr.Body)
 			require.NoError(t, err)
 
 			var result map[string]interface{}

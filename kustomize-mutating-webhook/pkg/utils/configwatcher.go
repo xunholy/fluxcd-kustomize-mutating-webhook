@@ -90,7 +90,13 @@ func NewConfigInformer(
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				cm := obj.(*corev1.ConfigMap)
+				if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+					obj = d.Obj
+				}
+				cm, ok := obj.(*corev1.ConfigMap)
+				if !ok {
+					return
+				}
 				if cmNames[cm.Name] {
 					log.Info().Str("configmap", cm.Name).Msg("ConfigMap deleted, reloading config")
 					ci.reloadConfig()
@@ -117,7 +123,13 @@ func NewConfigInformer(
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				s := obj.(*corev1.Secret)
+				if d, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+					obj = d.Obj
+				}
+				s, ok := obj.(*corev1.Secret)
+				if !ok {
+					return
+				}
 				if sNames[s.Name] {
 					log.Info().Str("secret", s.Name).Msg("Secret deleted, reloading config")
 					ci.reloadConfig()
@@ -178,12 +190,11 @@ func (ci *ConfigInformer) reloadConfig() {
 		}
 	}
 
-	if len(config) == 0 {
-		log.Warn().Msg("No configuration data found in watched ConfigMaps/Secrets")
-		// Don't overwrite existing config with empty if we had config before
-		if oldCount > 0 {
-			return
-		}
+	if len(config) == 0 && oldCount > 0 {
+		log.Warn().
+			Int("old_count", oldCount).
+			Msg("All watched ConfigMaps/Secrets returned empty data, preserving existing config")
+		return
 	}
 
 	// Update AppConfig

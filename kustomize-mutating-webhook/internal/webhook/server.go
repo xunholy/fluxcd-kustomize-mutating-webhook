@@ -86,6 +86,7 @@ func rateLimitMiddleware(r rate.Limit, b int) func(http.Handler) http.Handler {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }

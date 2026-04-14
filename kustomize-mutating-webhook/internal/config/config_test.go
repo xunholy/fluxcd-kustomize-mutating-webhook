@@ -29,7 +29,6 @@ func TestLoadConfig(t *testing.T) {
 	assert.Equal(t, ":9443", config.ServerAddress)
 	assert.Equal(t, "/custom/cert/path", config.CertFile)
 	assert.Equal(t, defaultKeyFile, config.KeyFile)
-	assert.Equal(t, defaultConfigDir, config.ConfigDir)
 	assert.Equal(t, defaultLogLevel, config.LogLevel)
 	assert.Equal(t, 200, config.RateLimit)
 }
@@ -46,7 +45,6 @@ func TestValidateConfig(t *testing.T) {
 				ServerAddress: ":8443",
 				CertFile:      "/path/to/cert",
 				KeyFile:       "/path/to/key",
-				ConfigDir:     "/path/to/config",
 				LogLevel:      "info",
 				RateLimit:     100,
 			},
@@ -57,7 +55,6 @@ func TestValidateConfig(t *testing.T) {
 			config: Config{
 				CertFile:  "/path/to/cert",
 				KeyFile:   "/path/to/key",
-				ConfigDir: "/path/to/config",
 				LogLevel:  "info",
 				RateLimit: 100,
 			},
@@ -69,7 +66,6 @@ func TestValidateConfig(t *testing.T) {
 				ServerAddress: ":8443",
 				CertFile:      "/path/to/cert",
 				KeyFile:       "/path/to/key",
-				ConfigDir:     "/path/to/config",
 				LogLevel:      "info",
 				RateLimit:     0,
 			},

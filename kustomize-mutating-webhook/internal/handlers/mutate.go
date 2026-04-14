@@ -44,7 +44,6 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Finding 2: guard against nil Request to prevent panic on malformed AdmissionReview.
 	if admissionReviewReq.Request == nil {
 		log.Error().Msg("AdmissionReview request field is nil")
 		metrics.ErrorCount.With(prometheus.Labels{"error_type": "nil_request"}).Inc()
@@ -74,7 +73,6 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Finding 5: check DELETE before attempting Object unmarshal — DELETE requests have nil Object.Raw.
 	if admissionReviewReq.Request.Operation == v1.Delete {
 		respondWithAdmissionReview(w, admissionResponse)
 		metrics.RequestDuration.With(prometheus.Labels{"resource_kind": resourceKind, "operation": operation}).Observe(time.Since(startTime).Seconds())
@@ -85,7 +83,6 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(admissionReviewReq.Request.Object.Raw, &obj); err != nil {
 		log.Error().Err(err).Msg("Failed to unmarshal Object")
 		metrics.ErrorCount.With(prometheus.Labels{"error_type": "unmarshal_error"}).Inc()
-		// Finding 4: return AdmissionReview JSON, not plain text.
 		respondWithAdmissionReview(w, deniedAdmissionReview(admissionReviewReq.Request.UID, "Failed to unmarshal Object"))
 		return
 	}
@@ -96,7 +93,6 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Finding 6: use lowercase snake_case log field names.
 	log.Info().
 		Str("uid", string(admissionReviewReq.Request.UID)).
 		Str("kind", resourceKind).
@@ -108,7 +104,6 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 	patch := createPatch(&obj)
 
 	if len(patch) > 0 {
-		// Finding 1: handle json.Marshal error instead of silently discarding it.
 		patchBytes, err := json.Marshal(patch)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to marshal patch")
@@ -121,7 +116,7 @@ func HandleMutate(w http.ResponseWriter, r *http.Request) {
 		admissionResponse.Response.PatchType = &pt
 
 		log.Debug().
-			Str("Patch", string(patchBytes)).
+			Str("patch", string(patchBytes)).
 			Msg("Applying mutation to resource")
 
 		metrics.MutationCount.With(prometheus.Labels{"resource_kind": resourceKind}).Inc()
@@ -172,8 +167,6 @@ func createPatch(obj *unstructured.Unstructured) []map[string]interface{} {
 	return patch
 }
 
-// Finding 3: buffer the JSON response before writing to avoid calling http.Error
-// after WriteHeader(200) has already been sent implicitly by the encoder.
 func respondWithAdmissionReview(w http.ResponseWriter, admissionResponse v1.AdmissionReview) {
 	respBytes, err := json.Marshal(admissionResponse)
 	if err != nil {

@@ -24,7 +24,6 @@ type Config struct {
 	ServerAddress                string
 	CertFile                     string
 	KeyFile                      string
-	ConfigDir                    string
 	LogLevel                     string
 	RateLimit                    int
 	AutoUpdateKustomizations     bool
@@ -38,7 +37,6 @@ const (
 	defaultServerAddress               = ":8443"
 	defaultCertFile                    = "/etc/webhook/certs/tls.crt"
 	defaultKeyFile                     = "/etc/webhook/certs/tls.key"
-	defaultConfigDir                   = "/etc/config"
 	defaultLogLevel                    = "info"
 	defaultRateLimit                   = 100
 	defaultAutoUpdateKustomizations    = true
@@ -53,7 +51,6 @@ func LoadConfig() Config {
 		ServerAddress:               getEnv("SERVER_ADDRESS", defaultServerAddress),
 		CertFile:                    getEnv("CERT_FILE", defaultCertFile),
 		KeyFile:                     getEnv("KEY_FILE", defaultKeyFile),
-		ConfigDir:                   getEnv("CONFIG_DIR", defaultConfigDir),
 		LogLevel:                    getEnv("LOG_LEVEL", defaultLogLevel),
 		RateLimit:                   getEnvAsInt("RATE_LIMIT", defaultRateLimit),
 		AutoUpdateKustomizations:    getEnvAsBool("AUTO_UPDATE_KUSTOMIZATIONS", defaultAutoUpdateKustomizations),
@@ -73,9 +70,6 @@ func ValidateConfig(cfg Config) error {
 	}
 	if cfg.KeyFile == "" {
 		return errors.New("key file path is required")
-	}
-	if cfg.ConfigDir == "" {
-		return errors.New("config directory is required")
 	}
 	if cfg.RateLimit <= 0 {
 		return errors.New("rate limit must be greater than 0")
