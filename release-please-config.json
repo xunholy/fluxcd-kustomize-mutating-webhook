@@ -3,6 +3,16 @@
   "include-v-in-tag": true,
   "separate-pull-requests": false,
   "tag-separator": "-",
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "kustomize-mutating-webhook",
+      "components": [
+        "kustomize-mutating-webhook",
+        "kustomize-mutating-webhook-chart"
+      ]
+    }
+  ],
   "packages": {
     "kustomize-mutating-webhook": {
       "package-name": "kustomize-mutating-webhook",
@@ -26,6 +36,13 @@
     "deploy/chart/kustomize-mutating-webhook": {
       "package-name": "kustomize-mutating-webhook-chart",
       "release-type": "helm",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ],
       "changelog-sections": [
         {
           "type": "feat",
