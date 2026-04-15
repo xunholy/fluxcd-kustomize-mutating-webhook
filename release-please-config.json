@@ -7,13 +7,6 @@
     "kustomize-mutating-webhook": {
       "package-name": "kustomize-mutating-webhook",
       "release-type": "go",
-      "extra-files": [
-        {
-          "type": "yaml",
-          "path": "../deploy/chart/kustomize-mutating-webhook/Chart.yaml",
-          "jsonpath": "$.appVersion"
-        }
-      ],
       "changelog-sections": [
         {
           "type": "feat",
