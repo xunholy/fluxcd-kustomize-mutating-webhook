@@ -60,10 +60,24 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-      - name: Run chart-releaser
+      - name: Install chart-releaser
         uses: helm/chart-releaser-action@a917fd15b20e8b64b94d9158ad54cd6345335584 # v1.6.0
+        with:
+          install_only: true
+
+      - name: Upload chart and update index
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          CR_SKIP_EXISTING: "true"
-        with:
-          charts_dir: deploy/chart
+          CR_OWNER: "${{ github.repository_owner }}"
+          CR_GIT_REPO: "${{ github.event.repository.name }}"
+          CHART_VERSION: "${{ steps.chart-version.outputs.version }}"
+        run: |
+          # Place packaged chart where cr expects it
+          mkdir -p .cr-release-packages
+          cp "kustomize-mutating-webhook-${CHART_VERSION}.tgz" .cr-release-packages/
+
+          # Upload chart package as a GitHub release asset (skip if release already exists)
+          cr upload --owner "$CR_OWNER" --git-repo "$CR_GIT_REPO" --skip-existing
+
+          # Regenerate and push the gh-pages index from all chart releases
+          cr index --owner "$CR_OWNER" --git-repo "$CR_GIT_REPO" --push
