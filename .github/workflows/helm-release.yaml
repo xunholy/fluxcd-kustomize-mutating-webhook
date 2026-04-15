@@ -65,19 +65,35 @@ jobs:
         with:
           install_only: true
 
-      - name: Upload chart and update index
+      - name: Upload chart to GitHub release
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_OWNER: "${{ github.repository_owner }}"
           CR_GIT_REPO: "${{ github.event.repository.name }}"
-          CHART_VERSION: "${{ steps.chart-version.outputs.version }}"
         run: |
-          # Place packaged chart where cr expects it
           mkdir -p .cr-release-packages
-          cp "kustomize-mutating-webhook-${CHART_VERSION}.tgz" .cr-release-packages/
-
-          # Upload chart package as a GitHub release asset (skip if release already exists)
+          cp kustomize-mutating-webhook-*.tgz .cr-release-packages/
           cr upload --owner "$CR_OWNER" --git-repo "$CR_GIT_REPO" --skip-existing
 
-          # Regenerate and push the gh-pages index from all chart releases
-          cr index --owner "$CR_OWNER" --git-repo "$CR_GIT_REPO" --push
+      - name: Update Helm repo index on gh-pages
+        env:
+          CHART_VERSION: "${{ steps.chart-version.outputs.version }}"
+          CR_OWNER: "${{ github.repository_owner }}"
+          CR_GIT_REPO: "${{ github.event.repository.name }}"
+        run: |
+          chart_name="kustomize-mutating-webhook"
+          release_url="https://github.com/${CR_OWNER}/${CR_GIT_REPO}/releases/download/${chart_name}-${CHART_VERSION}"
+
+          # Checkout gh-pages into a working directory
+          git fetch origin gh-pages
+          git worktree add gh-pages-dir origin/gh-pages
+
+          # Merge new chart entry into the existing index
+          helm repo index .cr-release-packages --url "$release_url" --merge gh-pages-dir/index.yaml
+          cp .cr-release-packages/index.yaml gh-pages-dir/index.yaml
+
+          # Commit and push
+          cd gh-pages-dir
+          git add index.yaml
+          git commit -m "Update index.yaml with ${chart_name}-${CHART_VERSION}"
+          git push origin HEAD:gh-pages
