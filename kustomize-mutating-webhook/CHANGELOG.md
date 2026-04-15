@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-v0.10.0...kustomize-mutating-webhook-v0.11.0) (2026-04-15)
+
+
+### Features
+
+* validate config keys against Flux substitute regex ([5c1a98a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/5c1a98a0b6ef1536e3d64750758f5e8795ad47af)), closes [#13](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/issues/13)
+
+
+### Bug Fixes
+
+* decouple readiness from config key count ([7aa378a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/7aa378aa341d89a6a03fef3ddb94b4aa40b3d50a)), closes [#12](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/issues/12)
+
 ## [0.10.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-0.9.0...kustomize-mutating-webhook-v0.10.0) (2026-04-14)
 
 

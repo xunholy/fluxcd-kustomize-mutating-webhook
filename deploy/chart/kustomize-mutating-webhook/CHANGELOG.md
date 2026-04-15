@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.10.1...kustomize-mutating-webhook-chart-v0.11.0) (2026-04-15)
+
+
+### Miscellaneous
+
+* **kustomize-mutating-webhook-chart:** Synchronize kustomize-mutating-webhook versions
+
 ## [0.10.1](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-chart-v0.10.0...kustomize-mutating-webhook-chart-v0.10.1) (2026-04-14)
 
 
