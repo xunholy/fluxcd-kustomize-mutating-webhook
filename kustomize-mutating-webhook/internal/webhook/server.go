@@ -14,9 +14,13 @@ import (
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/config"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/handlers"
 	"github.com/xunholy/fluxcd-mutating-webhook/internal/metrics"
-	"github.com/xunholy/fluxcd-mutating-webhook/pkg/utils"
 	"golang.org/x/time/rate"
 )
+
+// ReadinessCheck is called by the /ready endpoint to determine if the webhook is ready.
+// It should be set by main.go to the ConfigInformer's Ready() method.
+// Defaults to always-ready if not set.
+var ReadinessCheck func() bool
 
 type Server struct {
 	*http.Server
@@ -93,25 +97,21 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request) {
-	utils.AppConfig.Mu.RLock()
-	configLoaded := len(utils.AppConfig.Config) > 0
-	utils.AppConfig.Mu.RUnlock()
+	isReady := ReadinessCheck == nil || ReadinessCheck()
 
 	status := "Ready"
 	statusCode := http.StatusOK
-	if !configLoaded {
+	if !isReady {
 		status = "NotReady"
 		statusCode = http.StatusServiceUnavailable
 	}
 
 	ready := struct {
-		Status       string `json:"status"`
-		ConfigLoaded bool   `json:"configLoaded"`
-		Timestamp    string `json:"timestamp"`
+		Status    string `json:"status"`
+		Timestamp string `json:"timestamp"`
 	}{
-		Status:       status,
-		ConfigLoaded: configLoaded,
-		Timestamp:    time.Now().Format(time.RFC3339),
+		Status:    status,
+		Timestamp: time.Now().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

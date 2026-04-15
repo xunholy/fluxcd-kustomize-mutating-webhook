@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -32,6 +33,12 @@ type ConfigInformer struct {
 	updateCh             chan struct{}
 	done                 chan struct{}
 	stopOnce             sync.Once
+	ready                atomic.Bool
+}
+
+// Ready returns true once the informer caches have synced and the initial config load is complete.
+func (ci *ConfigInformer) Ready() bool {
+	return ci.ready.Load()
 }
 
 func NewConfigInformer(
@@ -283,6 +290,7 @@ func (ci *ConfigInformer) Start() error {
 
 	log.Info().Msg("Informer caches synced, performing initial config load")
 	ci.reloadConfig()
+	ci.ready.Store(true)
 
 	// Block until stopped
 	<-ci.done
