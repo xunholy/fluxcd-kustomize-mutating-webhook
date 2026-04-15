@@ -40,10 +40,10 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
-    # Skip if this is a helm-chart release
+    # Skip if this is a chart-only release
     if: |
       always() && needs.test.result == 'success' &&
-      (github.event_name != 'release' || startsWith(github.event.release.tag_name, 'app-v'))
+      (github.event_name != 'release' || !contains(github.event.release.tag_name, 'chart-v'))
     permissions:
       contents: read
       packages: write
@@ -55,33 +55,34 @@ jobs:
 
       - name: Get tag to build
         id: get-tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "release" ]; then
-            # Strip the 'app-' prefix for semver tags
-            tag="${{ github.event.release.tag_name }}"
-            tag="${tag#app-}"
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> $GITHUB_OUTPUT
+          elif [ "$EVENT_NAME" == "release" ]; then
+            # Extract semver from tag (e.g., kustomize-mutating-webhook-v0.11.0 -> v0.11.0)
+            tag=$(echo "$RELEASE_TAG" | grep -oP 'v\d+\.\d+\.\d+')
             echo "tag=$tag" >> $GITHUB_OUTPUT
           else
-            # Get latest app release tag
-            latest_tag=$(gh release list --limit 100 --json tagName -q '.[] | select(.tagName | startswith("app-v")) | .tagName' | head -n1 2>/dev/null || echo "")
+            # Get latest app release tag (exclude chart-only releases)
+            latest_tag=$(gh release list --limit 100 --json tagName -q '.[] | select(.tagName | test("^kustomize-mutating-webhook-v")) | select(.tagName | test("chart") | not) | .tagName' | head -n1 2>/dev/null || echo "")
             if [ -n "$latest_tag" ]; then
-              # Strip the 'app-' prefix
-              latest_tag="${latest_tag#app-}"
-              echo "tag=$latest_tag" >> $GITHUB_OUTPUT
+              tag=$(echo "$latest_tag" | grep -oP 'v\d+\.\d+\.\d+')
+              echo "tag=$tag" >> $GITHUB_OUTPUT
             else
               echo "tag=" >> $GITHUB_OUTPUT
             fi
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Checkout at tag
         if: steps.get-tag.outputs.tag != ''
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: app-${{ steps.get-tag.outputs.tag }}
+          ref: ${{ github.event.release.tag_name || format('kustomize-mutating-webhook-{0}', steps.get-tag.outputs.tag) }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3
