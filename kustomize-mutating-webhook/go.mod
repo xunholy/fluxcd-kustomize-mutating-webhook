@@ -1,6 +1,6 @@
 module github.com/xunholy/fluxcd-mutating-webhook
 
-go 1.26.1
+go 1.26.4
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
