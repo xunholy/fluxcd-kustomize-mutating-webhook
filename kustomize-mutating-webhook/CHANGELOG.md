@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-0.11.0...kustomize-mutating-webhook-v0.12.0) (2026-06-03)
+
+
+### Features
+
+* bump Go from 1.26.1 to 1.26.4 to address CVEs ([2f28a8a](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/2f28a8a85239919fe891ca4074ac622ec7756930))
+
 ## [0.11.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-v0.10.0...kustomize-mutating-webhook-v0.11.0) (2026-04-15)
 
 
