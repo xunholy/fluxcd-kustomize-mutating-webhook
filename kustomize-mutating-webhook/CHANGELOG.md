@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-0.12.0...kustomize-mutating-webhook-v0.12.1) (2026-09-14)
+
+
+### Miscellaneous
+
+* **deps:** update Go to 1.27.1 and refresh all module dependencies ([55a318b](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/commit/55a318b6b75f520e4c4c27c40e5bccb9d8998fb9))
+
 ## [0.12.0](https://github.com/xunholy/fluxcd-kustomize-mutating-webhook/compare/kustomize-mutating-webhook-0.11.0...kustomize-mutating-webhook-v0.12.0) (2026-06-03)
 
 
