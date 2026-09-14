@@ -75,11 +75,10 @@ func (cw *CertWatcher) Watch() error {
 				}
 			}
 			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
-				base := filepath.Base(event.Name)
-				if base != filepath.Base(cw.certFile) && base != filepath.Base(cw.keyFile) {
-					continue
-				}
-				log.Info().Str("event", event.String()).Msg("Certificate files modified. Reloading...")
+                // kubernetes Secret volumes update via an atomic symlink swap of "..data" directory entry, not a write to tls.crt/tls.key themselves
+				// so the fsnotify event name never matches those basenames. Reload any qualifying event in this (dedicated) directory instead of filtering 
+				//by file name
+				log.Info().Str("event", event.String()).Msg("Certificate directory changed. Reloading...")
 				if debounceTimer != nil {
 					debounceTimer.Stop()
 				}
