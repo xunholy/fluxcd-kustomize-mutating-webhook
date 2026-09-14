@@ -114,7 +114,14 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/kustomize-mutating-webhook
           tags: |
-            type=sha,prefix={{branch}}-
+            # {{branch}} is empty on a release event, so this produced the
+            # tag "-21abf89" -- a Docker reference may not start with a
+            # hyphen. buildx rejected it and failed the whole build, taking
+            # the four correct tags (0.12.1, 0.12, 0, latest) down with it,
+            # which is why v0.12.1 published no image. Use the branch prefix
+            # only where a branch exists.
+            type=sha,prefix={{branch}}-,enable=${{ github.event_name == 'push' }}
+            type=sha,prefix=sha-,enable=${{ github.event_name != 'push' }}
             type=semver,pattern={{version}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
             type=semver,pattern={{major}},value=${{ steps.get-tag.outputs.tag }},enable=${{ steps.get-tag.outputs.tag != '' }}
