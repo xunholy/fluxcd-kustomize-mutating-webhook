@@ -21,7 +21,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.21"
+          # Read from go.mod so CI cannot drift from the module's own
+          # requirement -- this said 1.21 while go.mod asked for 1.26.
+          go-version-file: kustomize-mutating-webhook/go.mod
 
       - name: Run tests
         working-directory: kustomize-mutating-webhook
