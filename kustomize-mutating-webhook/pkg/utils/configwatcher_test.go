@@ -420,3 +420,89 @@ func TestConfigInformer_InvalidKeysSkipped(t *testing.T) {
 	assert.False(t, hasDigit, "digit-starting key should be skipped")
 	assert.False(t, hasSpace, "space key should be skipped")
 }
+
+// newAutoUpdateFixture returns a started ConfigInformer with auto-update on,
+// plus the fake dynamic client that records Kustomization patches. It waits for
+// the initial-load re-stamp and clears it, so callers start from zero actions.
+func newAutoUpdateFixture(t *testing.T, cm *corev1.ConfigMap) (*ConfigInformer, *fake.Clientset, *dynamicfake.FakeDynamicClient) {
+	t.Helper()
+	resetAppConfig()
+	clientset := fake.NewSimpleClientset(cm)
+
+	ks := &unstructured.Unstructured{}
+	ks.SetGroupVersionKind(schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"})
+	ks.SetName("test-ks")
+	ks.SetNamespace("default")
+	dynClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{kustomizationGVR: "KustomizationList"}, ks)
+
+	ci := NewConfigInformer(clientset, "test-ns", []string{cm.Name}, nil, true, NewKustomizationUpdaterWithClient(dynClient, nil))
+	go ci.Start()
+	t.Cleanup(ci.Stop)
+
+	require.Eventually(t, func() bool { return patched(dynClient) }, 5*time.Second, 50*time.Millisecond,
+		"initial config load should re-stamp kustomizations")
+	// Let the in-flight update goroutine finish before clearing.
+	require.Eventually(t, func() bool { return len(ci.updateCh) == 0 }, 5*time.Second, 20*time.Millisecond)
+	dynClient.ClearActions()
+	return ci, clientset, dynClient
+}
+
+func patched(c *dynamicfake.FakeDynamicClient) bool {
+	for _, action := range c.Actions() {
+		if action.GetVerb() == "patch" {
+			return true
+		}
+	}
+	return false
+}
+
+// A periodic informer resync delivers UpdateFunc(old, new) with the same
+// ResourceVersion. It must not reload or re-stamp every Kustomization.
+func TestConfigInformer_ResyncWithSameResourceVersionDoesNotTrigger(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns", ResourceVersion: "42"},
+		Data:       map[string]string{"key1": "value"},
+	}
+	_, clientset, dynClient := newAutoUpdateFixture(t, cm)
+
+	// Re-deliver the identical object (same ResourceVersion), as a resync does.
+	_, err := clientset.CoreV1().ConfigMaps("test-ns").Update(context.Background(), cm.DeepCopy(), metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	assert.Never(t, func() bool { return patched(dynClient) }, time.Second, 50*time.Millisecond,
+		"a no-op resync must not re-stamp kustomizations")
+}
+
+// A reload whose effective substitution values are unchanged must not
+// re-stamp Kustomizations, whatever delivered it.
+func TestConfigInformer_UnchangedReloadDoesNotTrigger(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns"},
+		Data:       map[string]string{"key1": "value"},
+	}
+	ci, _, dynClient := newAutoUpdateFixture(t, cm)
+
+	ci.reloadConfig()
+
+	assert.Never(t, func() bool { return patched(dynClient) }, time.Second, 50*time.Millisecond,
+		"an unchanged reload must not re-stamp kustomizations")
+}
+
+// A real value change still re-stamps (regression guard for the fix above).
+func TestConfigInformer_ValueChangeStillTriggers(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-config", Namespace: "test-ns", ResourceVersion: "1"},
+		Data:       map[string]string{"key1": "value"},
+	}
+	_, clientset, dynClient := newAutoUpdateFixture(t, cm)
+
+	changed := cm.DeepCopy()
+	changed.ResourceVersion = "2"
+	changed.Data["key1"] = "changed"
+	_, err := clientset.CoreV1().ConfigMaps("test-ns").Update(context.Background(), changed, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool { return patched(dynClient) }, 5*time.Second, 50*time.Millisecond,
+		"a value change must re-stamp kustomizations")
+}
