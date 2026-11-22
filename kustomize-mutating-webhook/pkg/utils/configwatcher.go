@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -94,6 +95,11 @@ func NewConfigInformer(
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				cm := newObj.(*corev1.ConfigMap)
+				// Periodic informer resyncs deliver Update events for unchanged
+				// objects; skip them so a resync never reloads or re-stamps.
+				if old, ok := oldObj.(*corev1.ConfigMap); ok && old.ResourceVersion != "" && old.ResourceVersion == cm.ResourceVersion {
+					return
+				}
 				if cmNames[cm.Name] {
 					log.Info().Str("configmap", cm.Name).Msg("ConfigMap updated, reloading config")
 					ci.reloadConfig()
@@ -127,6 +133,10 @@ func NewConfigInformer(
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				s := newObj.(*corev1.Secret)
+				// Skip periodic informer resyncs of unchanged objects (see above).
+				if old, ok := oldObj.(*corev1.Secret); ok && old.ResourceVersion != "" && old.ResourceVersion == s.ResourceVersion {
+					return
+				}
 				if sNames[s.Name] {
 					log.Info().Str("secret", s.Name).Msg("Secret updated, reloading config")
 					ci.reloadConfig()
@@ -156,6 +166,7 @@ func (ci *ConfigInformer) reloadConfig() {
 	oldKeySet := make(map[string]bool)
 	AppConfig.Mu.RLock()
 	oldCount := len(AppConfig.Config)
+	oldConfig := maps.Clone(AppConfig.Config)
 	for key := range AppConfig.Config {
 		oldKeySet[key] = true
 	}
@@ -250,6 +261,14 @@ func (ci *ConfigInformer) reloadConfig() {
 		Strs("added_keys", addedKeys).
 		Strs("removed_keys", removedKeys).
 		Msg("Configuration reloaded successfully")
+
+	// Only re-stamp Kustomizations when the effective substitution values
+	// actually changed. A reload with identical data (e.g. an informer
+	// restart re-adding the same object) must not trigger a full update.
+	if maps.Equal(oldConfig, config) {
+		log.Debug().Msg("Configuration unchanged, skipping Kustomization updates")
+		return
+	}
 
 	if ci.autoUpdate && ci.kustomizationUpdater != nil {
 		select {
